@@ -23,7 +23,7 @@ structure_declaration = {
     ("controller_entry" ~ ident ~ statement)
     | ("controller" ~ ident ~ statement)
     | ("state_queue" ~ ident ~ statement)
-    | (&"state" ~ ident ~ statement)
+    | ("state" ~ ident ~ statement)
     | ("controller_control_flow" ~ ident ~ statement)
 }
 
@@ -39,7 +39,7 @@ statement = _{
     | variable_declaration
     | assignment
     | conditional
-    | ("stall" ~ "(" ~ expr ~ ")" ) 
+    | stall 
     | block
     | await_block
     | listen_handle
@@ -55,6 +55,7 @@ variable_declaration = { typed_identifier ~ ("=" ~ expr)? }
 assignment = { (qualified_name ~ "=" ~ expr) | (ident ~ "=" ~ expr) }
 conditional = { "if" ~ "(" ~ expr ~ ")" ~ statement ~ ("else" ~ statement)? }
 block = { "{" ~ statement* ~ "}" }
+stall = { "stall" ~ "(" ~ expr ~ ")" }
 
 expr = {
     unuaryop
@@ -101,7 +102,7 @@ when_block = {
 }
 
 listen_handle = {
-    "listen" ~ statement ~ catch_block+  
+    "listen" ~ statement ~ catch_block+ // statement => blocks
 }
 
 catch_block = {
