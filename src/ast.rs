@@ -79,8 +79,14 @@ pub enum ASTNode {
 
     Declaration(Box<ASTNode>),
 
+    Transition {
+        action: String,
+        ident: Box<ASTNode>,
+    },
+
     StructureDelcaration {
         s_type: String,
+        name: String,
         statement: Box<ASTNode>
     },
     
@@ -90,7 +96,7 @@ pub enum ASTNode {
 
     CatchBlock {
         keyword: String, 
-        qualified_name: Vec<ASTNode>, // function call, etc.
+        qualified_name: Box<ASTNode>, // function call, etc.
         idents: Vec<ASTNode>, // arguments
         stmts: Vec<ASTNode> // statements
     },
@@ -100,10 +106,16 @@ pub enum ASTNode {
     Expr(Expr),
 
     Listen {
-        keyword: String,
         block: Box<ASTNode>,
         catch_block: Box<ASTNode>,
     },
+
+    Call {
+        qualified_name: Box<ASTNode>,
+        list: Box<ASTNode>
+    },
+
+    ExprList(Vec<ASTNode>),
 
     None,
 }

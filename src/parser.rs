@@ -1,0 +1,206 @@
+use crate::ast::{self, ASTNode};
+use pest::Parser;
+use pest_derive::Parser;
+
+#[derive(Parser)]
+#[grammar = "aql.pest"]
+pub struct AQLParser;
+
+pub fn parse(source: &str) -> ASTNode {
+    // top-level parser
+    let pairs = AQLParser::parse(Rule::program, source).unwrap();
+    let mut ret = ASTNode::None;
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::declaration => {
+                ret =  ASTNode::Declaration(Box::new(parse_decl(pair)));                
+            },
+            _ => {}
+        }
+    };
+    ret
+}
+
+fn parse_decl(pair: pest::iterators::Pair<Rule>) -> ASTNode {
+    let pair = pair.into_inner().next().unwrap();
+    let ret = match pair.as_rule() {
+        Rule::structure_declaration => {
+            let mut pairs = pair.into_inner();
+
+            let s_type = pairs.next().unwrap().as_str().to_string();
+            let ident = pairs.next().unwrap();
+            let stmt = pairs.next().unwrap();
+
+            let mut structure_declaration = ast::ASTNode::StructureDelcaration { 
+                s_type, 
+                name: ident.as_str().to_string(),
+                statement: Box::new(parse_state(stmt)),
+            };
+            structure_declaration
+        },
+        Rule::internal_func_decl => {
+        
+            ast::ASTNode::None 
+        },
+        _ => ast::ASTNode::None 
+    };
+    ret
+}
+
+fn parse_state(pair: pest::iterators::Pair<Rule>) -> ASTNode {
+    let mut pairs = pair.clone().into_inner();
+    match pair.as_rule() {
+        Rule::labeled_statement => {
+
+        }
+        Rule::dsl_transition => {
+            let action = pairs.next().unwrap().as_str().to_string();
+            let ident = Box::new(ASTNode::Ident(pairs.next().unwrap().as_str().to_string()));
+
+            return ASTNode::Transition { action, ident }
+        }
+        Rule::variable_declaration => {
+
+        }
+        Rule::assignment => {
+
+        }
+        Rule::conditional => {
+
+        }
+        Rule::block => {
+            let mut stmts = vec![];
+
+            for pair in pairs {
+                stmts.push(parse_state(pair));
+            }
+
+            return ASTNode::Block(stmts);
+        }
+        Rule::await_block => {
+
+        }
+
+        Rule::listen_handle => {
+            let block = Box::new(parse_state(pairs.next().unwrap()));
+            let catch_block = Box::new(parse_catch(pairs.next().unwrap()));
+
+            return ASTNode::Listen { block, catch_block }
+        }
+
+        Rule::return_stmt => {
+
+        }
+
+        Rule::expr => {
+            return parse_expr(pair);
+        }
+        _ => {
+
+        }
+    }
+
+    ASTNode::None
+}
+
+fn parse_expr(pair: pest::iterators::Pair<Rule>) -> ASTNode {
+    let pair = pair.into_inner().next().unwrap();
+    println!("{:?}", pair.as_rule());
+    match pair.as_rule() {
+        Rule::dsl_term => {
+            return parse_dsl(pair);
+        }
+
+
+        Rule::unuaryop => {
+
+        }
+        
+        Rule::binop => {
+
+        }
+
+        Rule::list => {
+
+        }
+
+        _ => {}
+    }
+
+    ASTNode::None
+}
+
+fn parse_dsl(pair: pest::iterators::Pair<Rule>) -> ASTNode {
+    let pair = pair.into_inner().next().unwrap();
+    match pair.as_rule() {
+        Rule::call => {
+            let mut pairs = pair.into_inner();
+            let qualified_name_raw = pairs.next().unwrap();
+            let list_raw = pairs.next().unwrap();
+
+            let qualified_name = Box::new(parse_qualified_name(qualified_name_raw));
+            let mut args_list = vec![];
+
+            for expr in list_raw.into_inner() {
+                println!("{:?}", expr.as_rule());
+                args_list.push(parse_expr(expr));
+            }
+
+            let list = Box::new(ASTNode::ExprList(args_list));
+
+            return ASTNode::Call { qualified_name, list }
+        }
+        Rule::ident => {
+            return ASTNode::Ident(pair.as_str().to_string());
+        }
+        Rule::qualified_name => {
+            return parse_qualified_name(pair);
+        }
+        _ => {
+
+        }
+    }
+    ASTNode::None
+}
+
+fn parse_catch(pair: pest::iterators::Pair<Rule>) -> ASTNode {
+    let mut pairs = pair.into_inner();
+    let mut stmts = vec![];
+    let mut idents = vec![];
+
+    let keyword = pairs.next().unwrap().as_str().to_string();
+    let qualified_name = Box::new(parse_qualified_name(pairs.next().unwrap()));
+
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::ident => {
+                idents.push(ASTNode::Ident(pair.as_str().to_string()))
+            }
+            Rule::statement => {
+                let stmt = parse_state(pair);
+                stmts.push(stmt);
+            }
+            _ => {
+                // Left or right quota.
+                // Do nothing.
+            }
+        }
+    }
+    ASTNode::CatchBlock { keyword, 
+                        qualified_name, 
+                        idents, 
+                        stmts 
+                    }
+}
+
+fn parse_qualified_name(pair: pest::iterators::Pair<Rule>) -> ASTNode {
+    // name.name.name.var
+    let pairs = pair.into_inner();
+    let mut ret = vec![];
+
+    for pair in pairs {
+        ret.push(ASTNode::Ident(pair.as_str().to_string()));
+    }
+
+    ASTNode::QualifiedName { names: ret } 
+}

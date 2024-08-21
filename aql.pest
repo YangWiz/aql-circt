@@ -15,16 +15,20 @@ constval = { integer | decimal | string }
 qualified_name = { ident ~ ("." ~ ident)* }
 
 declaration = {
-    structure_declaration ~ ";"*
+    structure_declaration
     | internal_func_decl
 }
 
 structure_declaration = {
-    ("controller_entry" ~ ident ~ statement)
-    | ("controller" ~ ident ~ statement)
-    | ("state_queue" ~ ident ~ statement)
-    | ("state" ~ ident ~ statement)
-    | ("controller_control_flow" ~ ident ~ statement)
+    structure_keyword ~ ident ~ statement    
+}
+
+structure_keyword = {
+    "controller_entry"
+    | "controller"
+    | "state_queue"
+    | "state"
+    | "controller_control_flow"
 }
 
 internal_func_decl = {
@@ -106,7 +110,7 @@ listen_handle = {
 }
 
 catch_block = {
-    "handle" ~ qualified_name ~ "(" ~ ident* ~ ")" ~ statement*
+    "handle" ~ qualified_name ~ "(" ~ ident* ~ ")" ~ statement
 }
 
 return_stmt = {

@@ -1,14 +1,10 @@
 mod ast;
-
-use std::fs;
+mod parser;
 
 use ast::ASTNode;
-use pest::Parser;
-use pest_derive::Parser;
 
-#[derive(Parser)]
-#[grammar = "aql.pest"]
-pub struct AQLParser;
+use crate::parser::parse;
+use std::{fs, os::linux::raw::stat};
 
 fn main() {
     let file = fs::read_to_string("ReadyToIssue.aql").unwrap();
@@ -16,137 +12,38 @@ fn main() {
     println!("{:?}", ret);
 }
 
-pub fn parse(source: &str) -> ASTNode {
-    // top-level parser
-    let pairs = AQLParser::parse(Rule::program, source).unwrap();
-    let mut ret = ASTNode::None;
-    for pair in pairs {
-        match pair.as_rule() {
-            Rule::declaration => {
-                ret =  ASTNode::Declaration(Box::new(parse_decl(pair)));                
-            },
-            _ => {}
-        }
-    };
-    ret
-}
-
-fn parse_decl(pair: pest::iterators::Pair<Rule>) -> ASTNode {
-    let ret = match pair.as_rule() {
-        Rule::statement => {
-            let mut pairs = pair.into_inner();
-            let s_type = pairs.next().unwrap().to_string();
-            let ident = pairs.next().unwrap();
-            let stmt = pairs.next().unwrap();
-            let mut structure_declaration = ast::ASTNode::StructureDelcaration { 
-                s_type, 
-                statement: Box::new(parse_state(stmt)),
-            };
-            structure_declaration
+fn pretty_print(tree: ASTNode, mut output: String, indent: u8) -> String {
+    // Top level structure is the declaration.
+    match tree {
+        ASTNode::Integer(_) => todo!(),
+        ASTNode::Decimal(_) => todo!(),
+        ASTNode::Str(_) => todo!(),
+        ASTNode::Ident(_) => todo!(),
+        ASTNode::ConstVal(_) => todo!(),
+        ASTNode::QualifiedName { names } => todo!(),
+        ASTNode::Declaration(_) => todo!(),
+        ASTNode::Transition { action, ident } => todo!(),
+        ASTNode::StructureDelcaration { s_type, statement, name } => {
+            output += &s_type;
+            output += " ";
+            output += &name;
+            output += " ";
+            pretty_print(*statement, output, indent + 1);
         },
-        Rule::internal_func_decl => {
-        
-            ast::ASTNode::None 
+        ASTNode::Stmt(_) => todo!(),
+        ASTNode::InternalFuncDecl(_) => todo!(),
+        ASTNode::CatchBlock { keyword, qualified_name, idents, stmts } => todo!(),
+        ASTNode::Block(_) => {
+            output += "{\n";
+            output += "\n}";
         },
-        _ => ast::ASTNode::None 
-    };
-    ret
-}
+        ASTNode::Expr(_) => todo!(),
+        ASTNode::Listen { block, catch_block } => todo!(),
+        ASTNode::Call { qualified_name, list } => todo!(),
+        ASTNode::ExprList(_) => todo!(),
+        ASTNode::None => todo!(),
 
-fn parse_state(pair: pest::iterators::Pair<Rule>) -> ASTNode {
-    let mut pairs = pair.clone().into_inner();
-    match pair.as_rule() {
-        Rule::labeled_statement => {
-
-        }
-        Rule::dsl_transition => {
-
-        }
-        Rule::variable_declaration => {
-
-        }
-        Rule::assignment => {
-
-        }
-        Rule::conditional => {
-
-        }
-        Rule::block => {
-            let mut stmts = vec![];
-
-            for pair in pairs {
-                stmts.push(parse_state(pair));
-            }
-
-            return ASTNode::Block(stmts);
-        }
-        Rule::await_block => {
-
-        }
-
-        Rule::listen_handle => {
-            let keyword = pairs.next().unwrap().to_string();
-            let block = Box::new(parse_state(pairs.next().unwrap()));
-
-            let catch_block = Box::new(parse_catch(pairs.next().unwrap()));
-
-            return ASTNode::Listen { keyword, block, catch_block }
-        }
-
-        Rule::return_stmt => {
-
-        }
-
-        Rule::expr => {
-
-        }
-        _ => {
-
-        }
     }
-
-    ASTNode::None
-}
-
-fn parse_catch(pair: pest::iterators::Pair<Rule>) -> ASTNode {
-    let mut pairs = pair.into_inner();
-    let mut stmts = vec![];
-    let mut idents = vec![];
-
-    let keyword = pairs.next().unwrap().to_string();
-    let qualified_name = parse_qualified_name(pairs.next().unwrap());
-
-    for pair in pairs {
-        match pair.as_rule() {
-            Rule::ident => {
-                idents.push(ASTNode::Ident(pair.to_string()))
-            }
-            Rule::statement => {
-                let stmt = parse_state(pair);
-                stmts.push(stmt);
-            }
-            _ => {
-                // Left or right quota.
-                // Do nothing.
-            }
-        }
-    }
-    ASTNode::CatchBlock { keyword, 
-                        qualified_name, 
-                        idents, 
-                        stmts 
-                    }
-}
-
-fn parse_qualified_name(pair: pest::iterators::Pair<Rule>) -> Vec<ASTNode> {
-    // name.name.name.var
-    let pairs = pair.into_inner();
-    let mut ret = vec![];
-
-    for pair in pairs {
-        ret.push(ASTNode::Ident(pair.to_string()));
-    }
-
-    ret
+    String::new()
 }
 
