@@ -1,120 +1,127 @@
-    pub enum BinVerb {
-        Plus,
-        Minus,
-        Times,
-        Divide,
-        And,
-        Or,
-        Xor,
-        SmallerThan,
-        LargerThan,
-        SmallerOrEqual,
-        LargerOrEqual,
-        LeftShift,
-        RightShift,
-        Equal,
-        NotEqual
+#[derive(Debug)]
+pub enum BinVerb {
+    Plus,
+    Minus,
+    Times,
+    Divide,
+    And,
+    Or,
+    Xor,
+    SmallerThan,
+    LargerThan,
+    SmallerOrEqual,
+    LargerOrEqual,
+    LeftShift,
+    RightShift,
+    Equal,
+    NotEqual
+}
+
+#[derive(Debug)]
+pub enum UniVerb {
+    Not,
+    Tiled,
+    Minus,
+}
+
+#[derive(Debug)]
+pub enum Label {
+    ResultRewrite,
+    InstSource,
+    Commit
+}
+
+#[derive(Debug)]
+pub enum DSLKeyword {
+    Transition,
+    Reset,
+    Complete
+}
+
+#[derive(Debug)]
+pub enum Statement{
+    LabeledStatement {
+        label: Label,
+        stmt: Box<Statement>,
+    },
+
+    DSLTransition {
+        label: DSLKeyword,
+        stmt: Box<Statement>
+    },
+
+    VariableDeclaration {
+        t_ident: Box<ASTNode>,
+        expr: Box<ASTNode>,
+    },
+
+    Assignment {
+        name: Box<ASTNode>,
+        expr: Box<ASTNode>,
     }
+}
 
-    pub enum UniVerb {
-        Not,
-        Tiled,
-        Minus,
-    }
+#[derive(Debug)]
+pub enum ASTNode {
+    Integer(i32),
 
-    pub enum Label {
-        ResultRewrite,
-        InstSource,
-        Commit
-    }
+    Decimal(f64),
 
-    pub enum DSLKeyword {
-        Transition,
-        Reset,
-        Complete
-    }
+    Str(String),
 
-    pub enum Statement{
-        LabeledStatement {
-            label: Label,
-            stmt: Box<Statement>,
-        },
+    Ident(String),
 
-        DSLTransition {
-            label: DSLKeyword,
-            stmt: Box<Statement>
-        },
+    ConstVal(Box<ASTNode>),
 
-        VariableDeclaration {
-            t_ident: Box<ASTNode>,
-            expr: Box<ASTNode>,
-        },
+    QualifiedName {
+        names: Vec<ASTNode>, // list of ident (name)
+    },
 
-        Assignment {
-            name: Box<ASTNode>,
-            expr: Box<ASTNode>,
-        }
-    }
+    Declaration(Box<ASTNode>),
 
-    pub enum ASTNode {
-        Integer(i32),
+    StructureDelcaration {
+        s_type: String,
+        statement: Box<ASTNode>
+    },
+    
+    Stmt(Statement),
 
-        Decimal(f64),
+    InternalFuncDecl(Box<ASTNode>),
 
-        Str(String),
+    CatchBlock {
+        keyword: String, 
+        qualified_name: Vec<ASTNode>, // function call, etc.
+        idents: Vec<ASTNode>, // arguments
+        stmts: Vec<ASTNode> // statements
+    },
 
-        Ident(String),
+    Block(Vec<ASTNode>),
 
-        ConstVal(Box<ASTNode>),
+    Expr(Expr),
 
-        QualifiedName {
-            names: Vec<ASTNode>, // list of ident (name)
-        },
+    Listen {
+        keyword: String,
+        block: Box<ASTNode>,
+        catch_block: Box<ASTNode>,
+    },
 
-        Declaration(Box<ASTNode>),
+    None,
+}
 
-        StructureDelcaration {
-            s_type: String,
-            statement: Box<ASTNode>
-        },
-        
-        Stmt(Statement),
+#[derive(Debug)]
+pub enum Expr {
+    UnuaryOp {
+        verb: UniVerb,
+        term: Box<ASTNode> // dsl_term
+    },
 
-        InternalFuncDecl(Box<ASTNode>),
+    BinOp {
+        verb: BinVerb,
+        lhs: Box<ASTNode>,
+        rhs: Box<ASTNode>
+    },
 
-        CatchBlock {
-            keyword: String, 
-            qualified_name: Vec<ASTNode>, // function call, etc.
-            idents: Vec<ASTNode>, // arguments
-            stmts: Vec<ASTNode> // statements
-        },
+    List(Vec<Expr>),
 
-        Block(Vec<ASTNode>),
-
-        Expr(Expr),
-
-        Listen {
-            keyword: String,
-            block: Box<ASTNode>,
-            catch_block: Box<ASTNode>,
-        },
-
-        None,
-    }
-
-    pub enum Expr {
-        UnuaryOp {
-            verb: UniVerb,
-            term: Box<ASTNode> // dsl_term
-        },
-
-        BinOp {
-            verb: BinVerb,
-            lhs: Box<ASTNode>,
-            rhs: Box<ASTNode>
-        },
-
-        List(Vec<Expr>),
-
-        DSLTerm
-    }
+    DSLTerm
+}

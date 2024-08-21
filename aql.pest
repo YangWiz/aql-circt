@@ -1,4 +1,4 @@
-program = _{ SOI ~ "\n"* ~ declaration* ~ "\n"* ~ EOI } // underscore to silence the program.
+program = _{ SOI ~ "\n"* ~ (declaration ~ "\n"+)* ~ declaration? ~ EOI } // underscore to silence the program.
 
 WHITESPACE = _{ " " | "\t" }
 
@@ -8,14 +8,14 @@ decimal = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
 
 string = @{ "'" ~ ( "''" | (!"'" ~ ANY) )* ~ "'" }
 
-ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_" | ASCII_ALPHA)* }
 
 constval = { integer | decimal | string }
 
 qualified_name = { ident ~ ("." ~ ident)* }
 
 declaration = {
-    structure_declaration
+    structure_declaration ~ ";"*
     | internal_func_decl
 }
 
@@ -34,17 +34,17 @@ internal_func_decl = {
 arg_list = { typed_identifier ~ ("," ~ typed_identifier)* }
 
 statement = _{
-    labeled_statement
-    | dsl_transition
-    | variable_declaration
-    | assignment
-    | conditional
-    | stall 
-    | block
-    | await_block
-    | listen_handle
-    | return_stmt
-    | expr
+    labeled_statement ~ ";"?
+    | dsl_transition ~ ";"?
+    | variable_declaration ~ ";"?
+    | assignment ~ ";"?
+    | conditional ~ ";"?
+    | ("stall" ~ "(" ~ expr ~ ")" ) ~ ";"?
+    | block ~ ";"?
+    | await_block ~ ";"?
+    | listen_handle ~ ";"?
+    | return_stmt ~ ";"?
+    | expr ~ ";"?
 }
 
 labeled_statement = { label ~ statement }
@@ -54,14 +54,13 @@ dsl_keyword = { "transition" | "reset" | "complete" }
 variable_declaration = { typed_identifier ~ ("=" ~ expr)? }
 assignment = { (qualified_name ~ "=" ~ expr) | (ident ~ "=" ~ expr) }
 conditional = { "if" ~ "(" ~ expr ~ ")" ~ statement ~ ("else" ~ statement)? }
-block = { "{" ~ statement* ~ "}" }
-stall = { "stall" ~ "(" ~ expr ~ ")" }
+block = { "{" ~ "\n"* ~ (statement ~ "\n"*)* ~ "}" }
 
 expr = {
-    unuaryop
+    dsl_term
+    | unuaryop
     | binop
     | list
-    | dsl_term
 }
 
 typed_identifier = { ident ~ ident } // type var
@@ -73,12 +72,13 @@ list = { "[" ~ expr_list ~ "]" }
 
 expr_list = { (expr ~ ("," ~ expr)*)? }
 
+// The | order matters.
 dsl_term = {
     "(" ~ expr ~ ")"
     | call
-    | ident
     | qualified_name
     | constval
+    | ident
     | "prev<" ~ expr_list ~ ">"
     | "next<" ~ expr_list ~ ">"
     | unuaryop
@@ -102,7 +102,7 @@ when_block = {
 }
 
 listen_handle = {
-    "listen" ~ statement ~ catch_block+ // statement => blocks
+    "listen" ~ statement ~ catch_block+  
 }
 
 catch_block = {

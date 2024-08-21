@@ -11,21 +11,24 @@ use pest_derive::Parser;
 pub struct AQLParser;
 
 fn main() {
-    fs::read();
+    let file = fs::read_to_string("ReadyToIssue.aql").unwrap();
+    let ret = parse(&file);
+    println!("{:?}", ret);
 }
 
-pub fn parse(source: &str) -> () {
+pub fn parse(source: &str) -> ASTNode {
     // top-level parser
     let pairs = AQLParser::parse(Rule::program, source).unwrap();
+    let mut ret = ASTNode::None;
     for pair in pairs {
         match pair.as_rule() {
             Rule::declaration => {
-
+                ret =  ASTNode::Declaration(Box::new(parse_decl(pair)));                
             },
             _ => {}
         }
     };
-    ()
+    ret
 }
 
 fn parse_decl(pair: pest::iterators::Pair<Rule>) -> ASTNode {
@@ -42,6 +45,7 @@ fn parse_decl(pair: pest::iterators::Pair<Rule>) -> ASTNode {
             structure_declaration
         },
         Rule::internal_func_decl => {
+        
             ast::ASTNode::None 
         },
         _ => ast::ASTNode::None 
@@ -82,11 +86,11 @@ fn parse_state(pair: pest::iterators::Pair<Rule>) -> ASTNode {
 
         Rule::listen_handle => {
             let keyword = pairs.next().unwrap().to_string();
-            let block = parse_state(pairs.next().unwrap());
+            let block = Box::new(parse_state(pairs.next().unwrap()));
 
-            let catch_block = pairs.next().unwrap();
+            let catch_block = Box::new(parse_catch(pairs.next().unwrap()));
 
-            return ASTNode::Listen { keyword, , catch_block }
+            return ASTNode::Listen { keyword, block, catch_block }
         }
 
         Rule::return_stmt => {

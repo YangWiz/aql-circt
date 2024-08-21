@@ -1,0 +1,8 @@
+state ReadyToIssue {
+    listen {
+        MemSys.issue_load_request(physical_addr, instruction.seq_num);
+        transition WaitingForResponse;
+    } handle squash () from ROB {
+        reset WaitingForLoadInst;
+    }
+}
