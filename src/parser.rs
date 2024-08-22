@@ -165,11 +165,11 @@ fn parse_dsl(pair: pest::iterators::Pair<Rule>) -> ASTNode {
 
 fn parse_catch(pair: pest::iterators::Pair<Rule>) -> ASTNode {
     let mut pairs = pair.into_inner();
-    let mut stmts = vec![];
     let mut idents = vec![];
 
     let keyword = pairs.next().unwrap().as_str().to_string();
     let qualified_name = Box::new(parse_qualified_name(pairs.next().unwrap()));
+    let mut block = Box::new(ASTNode::None);
 
     for pair in pairs {
         match pair.as_rule() {
@@ -177,8 +177,7 @@ fn parse_catch(pair: pest::iterators::Pair<Rule>) -> ASTNode {
                 idents.push(ASTNode::Ident(pair.as_str().to_string()))
             }
             Rule::statement => {
-                let stmt = parse_state(pair);
-                stmts.push(stmt);
+                block = Box::new(parse_state(pair));
             }
             _ => {
                 // Left or right quota.
@@ -189,7 +188,7 @@ fn parse_catch(pair: pest::iterators::Pair<Rule>) -> ASTNode {
     ASTNode::CatchBlock { keyword, 
                         qualified_name, 
                         idents, 
-                        stmts 
+                        block 
                     }
 }
 

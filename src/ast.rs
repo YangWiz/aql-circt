@@ -1,4 +1,5 @@
 #[derive(Debug)]
+#[derive(PartialEq)]
 pub enum BinVerb {
     Plus,
     Minus,
@@ -18,6 +19,7 @@ pub enum BinVerb {
 }
 
 #[derive(Debug)]
+#[derive(PartialEq)]
 pub enum UniVerb {
     Not,
     Tiled,
@@ -25,6 +27,7 @@ pub enum UniVerb {
 }
 
 #[derive(Debug)]
+#[derive(PartialEq)]
 pub enum Label {
     ResultRewrite,
     InstSource,
@@ -32,6 +35,7 @@ pub enum Label {
 }
 
 #[derive(Debug)]
+#[derive(PartialEq)]
 pub enum DSLKeyword {
     Transition,
     Reset,
@@ -39,6 +43,7 @@ pub enum DSLKeyword {
 }
 
 #[derive(Debug)]
+#[derive(PartialEq)]
 pub enum Statement{
     LabeledStatement {
         label: Label,
@@ -61,7 +66,7 @@ pub enum Statement{
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ASTNode {
     Integer(i32),
 
@@ -98,7 +103,7 @@ pub enum ASTNode {
         keyword: String, 
         qualified_name: Box<ASTNode>, // function call, etc.
         idents: Vec<ASTNode>, // arguments
-        stmts: Vec<ASTNode> // statements
+        block: Box<ASTNode> // statements
     },
 
     Block(Vec<ASTNode>),
@@ -121,6 +126,7 @@ pub enum ASTNode {
 }
 
 #[derive(Debug)]
+#[derive(PartialEq)]
 pub enum Expr {
     UnuaryOp {
         verb: UniVerb,
