@@ -39,13 +39,13 @@ arg_list = { typed_identifier ~ ("," ~ typed_identifier)* }
 
 statement = _{
     labeled_statement ~ ";"?
+    | await_block ~ ";"?
     | dsl_transition ~ ";"?
     | variable_declaration ~ ";"?
     | assignment ~ ";"?
     | conditional ~ ";"?
     | ("stall" ~ "(" ~ expr ~ ")" ) ~ ";"?
     | block ~ ";"?
-    | await_block ~ ";"?
     | listen_handle ~ ";"?
     | return_stmt ~ ";"?
     | expr ~ ";"?
@@ -98,11 +98,11 @@ binop_keyword = {
 call = { qualified_name ~ "(" ~ expr_list ~ ")" }
 
 await_block = {
-    "await" ~ (call)? ~ "{" ~ (when_block)* ~ "}"
+    "await" ~ (call)? ~ "{" ~ "\n"* ~ (when_block ~ "\n"*)* ~ "}" ~ "\n"*
 }
 
 when_block = {
-    "when" ~ ident ~ "(" ~ (ident ~ (",")?)* ~ ")"
+    "when" ~ call ~ "from" ~ ident ~ block 
 }
 
 listen_handle = {
