@@ -1,5 +1,5 @@
 #[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum BinVerb {
     Plus,
     Minus,
@@ -19,7 +19,7 @@ pub enum BinVerb {
 }
 
 #[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum UniVerb {
     Not,
     Tiled,
@@ -27,7 +27,7 @@ pub enum UniVerb {
 }
 
 #[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum Label {
     ResultRewrite,
     InstSource,
@@ -35,7 +35,7 @@ pub enum Label {
 }
 
 #[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum DSLKeyword {
     Transition,
     Reset,
@@ -43,7 +43,7 @@ pub enum DSLKeyword {
 }
 
 #[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum Statement{
     LabeledStatement {
         label: Label,
@@ -66,7 +66,7 @@ pub enum Statement{
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ASTNode {
     Top(Vec<ASTNode>),
 
@@ -142,7 +142,7 @@ pub enum ASTNode {
 }
 
 #[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum Expr {
     UnuaryOp {
         verb: UniVerb,
