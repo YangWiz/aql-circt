@@ -9,16 +9,16 @@ pub struct AQLParser;
 pub fn parse(source: &str) -> ASTNode {
     // top-level parser
     let pairs = AQLParser::parse(Rule::program, source).unwrap();
-    let mut ret = ASTNode::None;
+    let mut ret = vec![];
     for pair in pairs {
         match pair.as_rule() {
             Rule::declaration => {
-                ret =  ASTNode::Declaration(Box::new(parse_decl(pair)));                
+                ret.push(ASTNode::Declaration(Box::new(parse_decl(pair))));                
             },
             _ => {}
         }
     };
-    ret
+    ASTNode::Top(ret)
 }
 
 fn parse_decl(pair: pest::iterators::Pair<Rule>) -> ASTNode {
@@ -31,7 +31,7 @@ fn parse_decl(pair: pest::iterators::Pair<Rule>) -> ASTNode {
             let ident = pairs.next().unwrap();
             let stmt = pairs.next().unwrap();
 
-            let mut structure_declaration = ast::ASTNode::StructureDelcaration { 
+            let structure_declaration = ast::ASTNode::StructureDelcaration { 
                 s_type, 
                 name: ident.as_str().to_string(),
                 statement: Box::new(parse_state(stmt)),
@@ -78,7 +78,24 @@ fn parse_state(pair: pest::iterators::Pair<Rule>) -> ASTNode {
             return ASTNode::Block(stmts);
         }
         Rule::await_block => {
+            let keyword = String::from("await");
+            let mut call = None;
+            let mut when_block = Box::new(ASTNode::None);
 
+            for pair in pairs {
+                match pair.as_rule() {
+                    Rule::call => {
+                        call = Some(Box::new(parse_dsl(pair)));
+                    },
+                    Rule::when_block => {
+                        when_block = Box::new(parse_when(pair));
+                    },
+                    _ => {
+
+                    }
+                }
+            }
+            return ASTNode::Await { keyword, call, when_block };
         }
 
         Rule::listen_handle => {
@@ -101,6 +118,14 @@ fn parse_state(pair: pest::iterators::Pair<Rule>) -> ASTNode {
     }
 
     ASTNode::None
+}
+
+fn parse_when(pair: pest::iterators::Pair<Rule>) -> ASTNode {
+    let mut pairs = pair.into_inner();
+    let call = Box::new(parse_dsl(pairs.next().unwrap()));
+    let ident = Box::new(ASTNode::Ident(pairs.next().unwrap().as_str().to_string()));
+    let block = Box::new(parse_state(pairs.next().unwrap()));
+    ASTNode::When { keyword: String::from("when"), call, ident, block }
 }
 
 fn parse_expr(pair: pest::iterators::Pair<Rule>) -> ASTNode {

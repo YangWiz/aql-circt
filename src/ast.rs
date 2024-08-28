@@ -68,6 +68,8 @@ pub enum Statement{
 
 #[derive(Debug, PartialEq)]
 pub enum ASTNode {
+    Top(Vec<ASTNode>),
+
     Integer(i32),
 
     Decimal(f64),
@@ -121,6 +123,20 @@ pub enum ASTNode {
     },
 
     ExprList(Vec<ASTNode>),
+
+    Await {
+        keyword: String,
+        call: Option<Box<ASTNode>>,
+        when_block: Box<ASTNode>,
+    },
+
+    When {
+        keyword: String,
+        call: Box<ASTNode>,
+        ident: Box<ASTNode>,
+        block: Box<ASTNode> 
+    },
+
 
     None,
 }

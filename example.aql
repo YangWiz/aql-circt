@@ -1,0 +1,8 @@
+state iq_await_creation {
+  await {
+    when insert(instruction) from RENAME {
+      instruction = instruction;
+      transition iq_schedule_inst;
+    }
+  }
+}
