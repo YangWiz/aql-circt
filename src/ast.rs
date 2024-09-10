@@ -42,33 +42,14 @@ pub enum DSLKeyword {
     Complete
 }
 
-#[derive(Debug)]
-#[derive(PartialEq, Clone)]
-pub enum Statement{
-    LabeledStatement {
-        label: Label,
-        stmt: Box<Statement>,
-    },
-
-    DSLTransition {
-        label: DSLKeyword,
-        stmt: Box<Statement>
-    },
-
-    VariableDeclaration {
-        t_ident: Box<ASTNode>,
-        expr: Box<ASTNode>,
-    },
-
-    Assignment {
-        name: Box<ASTNode>,
-        expr: Box<ASTNode>,
-    }
-}
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum ASTNode {
     Top(Vec<ASTNode>),
+
+    TypedIdentifier {
+        aql_type: String,
+        variable: String,
+    },
 
     Integer(i32),
 
@@ -84,6 +65,16 @@ pub enum ASTNode {
         names: Vec<ASTNode>, // list of ident (name)
     },
 
+    VariableDeclaration {
+        typed_identifier: Box<ASTNode>, // type_identifier
+        expr: Option<Box<ASTNode>>
+    }, 
+
+    Assignment {
+        name: String,
+        expr: Box<ASTNode>
+    },
+
     Declaration(Box<ASTNode>),
 
     Transition {
@@ -97,8 +88,6 @@ pub enum ASTNode {
         statement: Box<ASTNode>
     },
     
-    Stmt(Statement),
-
     InternalFuncDecl(Box<ASTNode>),
 
     CatchBlock {

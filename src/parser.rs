@@ -47,6 +47,16 @@ fn parse_decl(pair: pest::iterators::Pair<Rule>) -> ASTNode {
     ret
 }
 
+fn parse_typed_identifier(pair: pest::iterators::Pair<Rule>) -> ASTNode {
+    // two idents.
+    let mut pairs = pair.clone().into_inner();
+
+    let aql_type = pairs.next().unwrap().as_str().to_string();
+    let variable = pairs.next().unwrap().as_str().to_string();
+
+    ASTNode::TypedIdentifier { aql_type, variable }
+}
+
 fn parse_state(pair: pest::iterators::Pair<Rule>) -> ASTNode {
     let mut pairs = pair.clone().into_inner();
     match pair.as_rule() {
@@ -57,13 +67,25 @@ fn parse_state(pair: pest::iterators::Pair<Rule>) -> ASTNode {
             let action = pairs.next().unwrap().as_str().to_string();
             let ident = Box::new(ASTNode::Ident(pairs.next().unwrap().as_str().to_string()));
 
-            return ASTNode::Transition { action, ident }
+            return ASTNode::Transition { action, ident };
         }
         Rule::variable_declaration => {
+            let typed_identifier = pairs.next().unwrap();
+            let typed_identifier = Box::new(parse_typed_identifier(typed_identifier));
+            if let Some(expr_raw) = pairs.next() {
+                let expr = Some(Box::new(parse_expr(expr_raw)));
+                return ASTNode::VariableDeclaration { typed_identifier, expr };
+            } else {
+                return ASTNode::VariableDeclaration { typed_identifier, expr: None };
+            }
 
         }
         Rule::assignment => {
+            let name = pairs.next().unwrap().as_str().to_string();
 
+            let expr = pairs.next().unwrap();
+            let expr = Box::new(parse_expr(expr));
+            return ASTNode::Assignment { name, expr };
         }
         Rule::conditional => {
 
@@ -130,7 +152,7 @@ fn parse_when(pair: pest::iterators::Pair<Rule>) -> ASTNode {
 
 fn parse_expr(pair: pest::iterators::Pair<Rule>) -> ASTNode {
     let pair = pair.into_inner().next().unwrap();
-    println!("{:?}", pair.as_rule());
+    // println!("{:?}", pair.as_rule());
     match pair.as_rule() {
         Rule::dsl_term => {
             return parse_dsl(pair);
@@ -167,7 +189,7 @@ fn parse_dsl(pair: pest::iterators::Pair<Rule>) -> ASTNode {
             let mut args_list = vec![];
 
             for expr in list_raw.into_inner() {
-                println!("{:?}", expr.as_rule());
+                // println!("{:?}", expr.as_rule());
                 args_list.push(parse_expr(expr));
             }
 

@@ -1,28 +1,75 @@
 mod ast;
 mod parser;
 mod utils;
+mod cfg;
 
-use ast::{ASTNode, Statement};
+use ast::ASTNode;
+use cfg::{CFGAccessor, Statement};
 
 use crate::parser::parse;
 use std::fs;
-use std::collections::HashMap;
 
 fn main() {
     let file = fs::read_to_string("example.aql").unwrap();
     let ret = parse(&file);
-    let mut output = Vec::new();
-    println!("{:?}", &ret);
+    // let mut output = Vec::new();
+    // println!("{:?}", &ret);
 
-    let mut env = HashMap::new();
-    pretty_print(ret, &mut output, 0, &mut env);
+    // let mut env = HashMap::new();
+    
+    let test = cfg::convert(ret.clone());
+    println!("{}", generate(test));
 
+    // let mut env = HashMap::new();
+
+    // pretty_print(ret, &mut output, 0, &mut env);
+
+    /*
     for el in output {
          print!("{}", el);
     }
+    */
 
 }
 
+fn generate(cfgs: CFGAccessor) -> String {
+    let cfg_vec = cfgs.cfgs;
+
+    let fsm_machine = format!("fsm.machine @{}(%arg0: i1, %arg1: i1) -> (i16) attributes {{initialState = \"{}\"}}", cfgs.fsm_name, cfgs.entry);
+    println!("{}", fsm_machine);
+
+    for cfg in cfg_vec {
+        let c = cfg.as_ref();
+        let insts = &c.insts;
+
+        for inst in insts {
+            match inst {
+                cfg::Inst::Stmt(stmt) => {
+                    println!("{}", generate_stmt(&stmt));
+                },
+            }
+        }
+    }
+
+    String::new()
+}
+
+fn generate_stmt(stmt: &ASTNode) -> String {
+    let ret = match stmt {
+        ASTNode::VariableDeclaration { typed_identifier, expr } => {
+            generate_decl(stmt)
+        },
+        ASTNode::Assignment { name, expr } => { String::new() },
+        ASTNode::Transition { action, ident } => todo!(),
+        _ => {
+            panic!("Grammar error for instructions.");
+        }
+    };
+
+    ret
+}
+
+/*
 fn pretty_print(tree: ASTNode, output: &mut Vec<String>, indent: u8, env: &mut HashMap<String, Option<String>>) -> String {
     // Top level structure is the declaration.
     match tree {
@@ -79,16 +126,6 @@ fn pretty_print(tree: ASTNode, output: &mut Vec<String>, indent: u8, env: &mut H
             }
 
             pretty_print(*statement, output, indent, env);
-        },
-        ASTNode::Stmt(stmt) => {
-            match stmt {
-                Statement::LabeledStatement { label, stmt } => todo!(),
-                Statement::DSLTransition { label, stmt } => todo!(),
-                Statement::VariableDeclaration { t_ident, expr } => {
-                    print!("hi!");
-                },
-                Statement::Assignment { name, expr } => todo!(),
-            }
         },
         ASTNode::InternalFuncDecl(_) => todo!(),
         ASTNode::CatchBlock { keyword, qualified_name, idents, block } => {
@@ -163,4 +200,43 @@ fn pretty_print(tree: ASTNode, output: &mut Vec<String>, indent: u8, env: &mut H
     }
     String::new()
 }
+*/
+fn generate_decl(decl: &ASTNode) -> String {
+    let mut ret = String::from("fsm.variable");
 
+    if let ASTNode::VariableDeclaration { typed_identifier, expr } = decl {
+        if let ASTNode::TypedIdentifier { aql_type, variable } = *typed_identifier.clone() {
+            match expr {
+                Some(val) => {
+                    if let ASTNode::Ident(expr) = *val.clone() {
+                        ret = format!("fsm.variable \"{}\" {{initValue = {} : {} }} : {}", variable, expr, aql_type, aql_type);
+                    } else {
+                        // todo(parse the expr)
+                        ret = format!("fsm.variable \"{}\" {{initValue = 0 : {} }} : {}", variable, aql_type, aql_type);
+                    }
+                },
+                None => {
+                    ret = format!("fsm.variable \"{}\" {{initValue = 0 : {} }} : {}", variable, aql_type, aql_type);
+                },
+            }
+        } else {
+            panic!("invalid grammar.")
+        }
+    };
+    ret
+}
+
+/*
+fn print_assign(assign: ASTNode) -> String {
+    let mut ret = String::from("fsm.variable");
+    if let ASTNode::Assignment {name, expr} = assign { 
+        if let ASTNode::TypedIdentifier { aql_type, variable } = *epxr {
+            ret = format!("fsm.variable \"{}\" {{initValue = 0 : {} }} : {}", variable, aql_type, aql_type);
+        }
+    } else {
+        panic!("invalid grammar.")
+    }
+
+    ret
+}
+*/
