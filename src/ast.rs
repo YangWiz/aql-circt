@@ -18,6 +18,8 @@ pub enum BinVerb {
     NotEqual
 }
 
+
+
 #[derive(Debug)]
 #[derive(PartialEq, Clone)]
 pub enum UniVerb {
@@ -59,7 +61,7 @@ pub enum ASTNode {
 
     Ident(String),
 
-    ConstVal(Box<ASTNode>),
+    ConstVal(String),
 
     QualifiedName {
         names: Vec<ASTNode>, // list of ident (name)

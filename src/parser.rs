@@ -203,6 +203,10 @@ fn parse_dsl(pair: pest::iterators::Pair<Rule>) -> ASTNode {
         Rule::qualified_name => {
             return parse_qualified_name(pair);
         }
+        Rule::constval => {
+            let constval = pair.into_inner().next().unwrap();
+            return ASTNode::ConstVal(constval.as_str().to_string());
+        }
         _ => {
 
         }

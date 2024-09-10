@@ -1,20 +1,51 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{collections::HashMap, rc::Rc};
 
 use crate::ASTNode;
 
-#[derive(Debug)]
-#[derive(PartialEq, Clone)]
-pub enum Statement{
-    // Those are instructions with no control transfer.
-    DSLTransition(Box<ASTNode>),
+#[derive(Debug, PartialEq, Clone)]
+pub struct Transition {
+    pub target: String, // State.
+    pub guards: Option<Vec<Box<ASTNode>>>, // Conditional expr.
+}
 
-    VariableDeclaration(Box<ASTNode>),
+impl Transition {
+    fn new(target: String) -> Self {
+        Transition {
+            target,
+            guards: None
+        }
+    }
 
-    Assignment(Box<ASTNode>),
+    fn insert_guard(&mut self, guard: Box<ASTNode>) {
+        match &mut self.guards {
+            Some(guards) => {
+                guards.push(guard);
+            },
+            None => {
+                let mut temp = vec![];
+                temp.push(guard);
+                self.guards = Some(temp);
+            },
+        }
+    }
+}
 
-    // LabeledStatement(Box<ASTNode>),
-    // Conditional(Box<ASTNode>),
-    // AwaitBlock(Box<ASTNode>),
+// We put it at the end of the CFG, since it's the only way to transfer the control (at this stage.)
+#[derive(Debug, PartialEq, Clone)]
+pub struct Transitions {
+    pub trans: Vec<Transition>
+}
+
+impl Transitions {
+    fn new() -> Self {
+        Transitions {
+            trans: vec![]
+        }
+    }
+
+    fn insert(&mut self, transition: Transition) {
+        self.trans.push(transition);
+    }
 }
 
 #[derive(Clone, PartialEq, Debug, Eq, Hash)]
@@ -25,7 +56,7 @@ pub struct Scope {
 
 #[derive(Debug, Clone)]
 pub enum Inst {
-    Stmt(ASTNode),
+    Stmt(ASTNode), // We don't have a strict type strictions.
 }
 
 #[derive(Clone, PartialEq, Debug, Eq, Hash)]
@@ -39,21 +70,21 @@ pub enum Structure {
 }
 
 #[derive(Debug, Clone)]
-pub struct CFG {
+pub struct State {
     pub scope: Scope,
-    pub insts: Vec<Inst>, // last inst as the terminator.
-    pub next: Vec<Scope>
+    pub insts: Vec<Inst>,
+    pub next: Transitions
 }
 
 #[derive(Debug)]
-pub struct CFGAccessor {
+pub struct StateMachine {
     pub fsm_name: String,
     pub entry: String,
-    pub map: HashMap<Scope, Rc<CFG>>,
-    pub cfgs: Vec<Rc<CFG>>
+    pub map: HashMap<Scope, Rc<State>>,
+    pub cfgs: Vec<Rc<State>>
 }
 
-impl CFGAccessor {
+impl StateMachine {
     pub fn new() -> Self {
         Self {
             fsm_name: String::new(),
@@ -63,11 +94,11 @@ impl CFGAccessor {
         }
     }
 
-    pub fn get_cfg(&self, scope: &Scope) -> Rc<CFG> {
+    pub fn get_cfg(&self, scope: &Scope) -> Rc<State> {
         Rc::clone(&self.map[scope])
     }
 
-    pub fn get_cfg_structure(&self, key: Structure) -> Rc<CFG> {
+    pub fn get_cfg_structure(&self, key: Structure) -> Rc<State> {
         for cfg in &self.cfgs {
             if cfg.scope.is_structure(&key) {
                 return Rc::clone(&cfg)
@@ -85,19 +116,19 @@ impl CFGAccessor {
         String::new()
     }
 
-    pub fn insert_cfg(&mut self, scope: Scope, cfg: CFG) {
+    pub fn insert_cfg(&mut self, scope: Scope, cfg: State) {
         let cfg_cell = Rc::new(cfg);
         self.map.insert(scope, Rc::clone(&cfg_cell));
         self.cfgs.push(Rc::clone(&cfg_cell));
     }
 }
 
-impl CFG {
+impl State {
     pub fn new(scope: Scope) -> Self {
         Self {
             scope,
             insts: vec![],
-            next: vec![],
+            next: Transitions::new(),
         }
     }
 
@@ -120,9 +151,9 @@ impl Scope {
     }
 }
 
-fn convert_struct(s_type: &str, name: &str, node: ASTNode, cfgs: &mut CFGAccessor) {
+fn convert_struct(s_type: &str, name: &str, node: ASTNode, cfgs: &mut StateMachine) {
     // node is the structure_declaration.
-    let ret = CFGAccessor::new();
+    let ret = StateMachine::new();
 
     let structure;
     if s_type == "controller_entry" {
@@ -141,7 +172,9 @@ fn convert_struct(s_type: &str, name: &str, node: ASTNode, cfgs: &mut CFGAccesso
     let scope = Scope::from(structure.clone(), String::from(name));
 
     if let ASTNode::Block(blk) = node {
-        let mut cfg = CFG::new(scope.clone());
+        let mut cfg = State::new(scope.clone());
+        let mut transitions = Transitions::new();
+
         for stmt_raw in blk {
             // println!("{:?}", stmt_raw);
 
@@ -160,17 +193,35 @@ fn convert_struct(s_type: &str, name: &str, node: ASTNode, cfgs: &mut CFGAccesso
                     let inst = Inst::Stmt(stmt_raw);
                     cfg.insert_inst(inst);
                 },
+                ASTNode::Transition { action, ident } => {
+                    // Direct transition without any conditions.
+                    if action == "transition" {
+                        // ident should be the string.
+                        if let ASTNode::Ident(target) = *ident {
+                            let transition = Transition::new(target.clone());
+                            transitions.insert(transition);
+                        }
+                    } else if action == "complete" {
+
+                    } else if action == "reset" {
+
+                    } else {
+                        panic!("unknown action.");
+                    }
+                }
                 _ => {
                     println!("Unimplementated stmt.");
                 }
             }
         }
+        
+        cfg.next = transitions;
         cfgs.insert_cfg(scope, cfg)
     }
 }
 
-pub fn convert(node: ASTNode) -> CFGAccessor {
-    let mut cfgs = CFGAccessor::new();
+pub fn convert(node: ASTNode) -> StateMachine {
+    let mut cfgs = StateMachine::new();
 
     let ret = match node {
         ASTNode::Top(decls) => {
@@ -192,28 +243,7 @@ pub fn convert(node: ASTNode) -> CFGAccessor {
                 }
             }
         },
-        ASTNode::Integer(_) => todo!(),
-        ASTNode::Decimal(_) => todo!(),
-        ASTNode::Str(_) => todo!(),
-        ASTNode::Ident(_) => todo!(),
-        ASTNode::ConstVal(_) => todo!(),
-        ASTNode::QualifiedName { names } => todo!(),
-        ASTNode::Declaration(_) => todo!(),
-        ASTNode::Transition { action, ident } => todo!(),
-        ASTNode::StructureDelcaration { s_type, name, statement } => todo!(),
-        ASTNode::InternalFuncDecl(_) => todo!(),
-        ASTNode::CatchBlock { keyword, qualified_name, idents, block } => todo!(),
-        ASTNode::Block(_) => todo!(),
-        ASTNode::Expr(_) => todo!(),
-        ASTNode::Listen { block, catch_block } => todo!(),
-        ASTNode::Call { qualified_name, list } => todo!(),
-        ASTNode::ExprList(_) => todo!(),
-        ASTNode::Await { keyword, call, when_block } => todo!(),
-        ASTNode::When { keyword, call, ident, block } => todo!(),
-        ASTNode::None => todo!(),
-        ASTNode::TypedIdentifier { aql_type, variable } => todo!(),
-        ASTNode::VariableDeclaration { typed_identifier, expr } => todo!(),
-        ASTNode::Assignment { name, expr } => todo!(),
+        _ => todo!()
     };
 
     // find the controller entry.
@@ -240,8 +270,6 @@ pub fn convert(node: ASTNode) -> CFGAccessor {
             }
         }
     }
-
-    println!("{}", cfgs.entry);
 
     cfgs
 }

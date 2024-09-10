@@ -4,7 +4,8 @@ mod utils;
 mod cfg;
 
 use ast::ASTNode;
-use cfg::{CFGAccessor, Statement};
+use cfg::{StateMachine, Structure};
+use eval;
 
 use crate::parser::parse;
 use std::fs;
@@ -26,32 +27,70 @@ fn main() {
 
     /*
     for el in output {
+      fsm.update %cnt, %c256_i16 : i16
+    }
+  }
+
+  fsm.state @BUSY output  {
+    %false = arith.constant false
+    fsm.output %false : i1
+  } transitions  {
+    // Transit to BUSY itself when `cnt` is not equal to zero. Meanwhile,
+    // decrease `cnt` by one.
+    fsm.transition @BUSY guard  {
+      %c0_i16 = arith.constant 0 : i16
+      %0 = arith.cmpi ne, %cnt, %c0_i16 : i16
+      fsm.return %0
+    } action  {
+      %c1_i16 = arith.constant 1 :
          print!("{}", el);
     }
     */
 
 }
 
-fn generate(cfgs: CFGAccessor) -> String {
+fn generate(cfgs: StateMachine) -> String {
     let cfg_vec = cfgs.cfgs;
 
-    let fsm_machine = format!("fsm.machine @{}(%arg0: i1, %arg1: i1) -> (i16) attributes {{initialState = \"{}\"}}", cfgs.fsm_name, cfgs.entry);
-    println!("{}", fsm_machine);
+    let mut fsm_machine = format!("fsm.machine @{}(%arg0: i1, %arg1: i1) -> (i16) attributes {{initialState = \"{}\"}}", cfgs.fsm_name, cfgs.entry);
 
-    for cfg in cfg_vec {
+    fsm_machine += " {\n";
+
+    for cfg in cfg_vec.clone() {
         let c = cfg.as_ref();
         let insts = &c.insts;
 
         for inst in insts {
             match inst {
                 cfg::Inst::Stmt(stmt) => {
-                    println!("{}", generate_stmt(&stmt));
+                    fsm_machine += "\t";
+                    fsm_machine += &generate_decl(stmt);
+                    fsm_machine += "\n";
                 },
             }
         }
+
+        
     }
 
-    String::new()
+    for cfg in cfg_vec {
+        // Transitions only exist in the states, should filter the other structures.
+        if let Structure::State = cfg.scope.label {
+            let state_name = format!("\tfsm.state @{} transitions {{\n", &cfg.scope.name);
+            fsm_machine += &state_name;
+
+            // print transition.
+            for tran in &cfg.next.trans {
+                // guard and actions are all optional.
+                let transition = format!("\t\tfsm.transition @{}\n", tran.target);
+                fsm_machine += &transition;
+            }
+            fsm_machine += "\t}\n\n";
+        }
+    }
+
+    fsm_machine += "}\n";
+    fsm_machine
 }
 
 fn generate_stmt(stmt: &ASTNode) -> String {
@@ -68,6 +107,48 @@ fn generate_stmt(stmt: &ASTNode) -> String {
 
     ret
 }
+
+
+
+// These are all the initilzation process, so should add one indent.
+fn generate_decl(decl: &ASTNode) -> String {
+    let mut ret = String::new();
+
+    if let ASTNode::VariableDeclaration { typed_identifier, expr } = decl {
+        if let ASTNode::TypedIdentifier { aql_type, variable } = *typed_identifier.clone() {
+            match expr {
+                Some(val) => {
+                    // println!("Expr: {:?}", *val);
+                    // ret = format!("fsm.variable \"{}\" {{initValue = {} : {} }} : {}", variable, init_value, aql_type, aql_type);
+                    if let ASTNode::ConstVal(val) = *val.clone() {
+                        ret = format!("%{} = fsm.variable \"{}\" {{initValue = {} : {} }} : {}", variable, variable, val, aql_type, aql_type);
+                    }
+                },
+                None => {
+                    ret = format!("%{} = fsm.variable \"{}\" {{initValue = 0 : {} }} : {}", variable, variable, aql_type, aql_type);
+                },
+            }
+        } else {
+            panic!("invalid grammar.")
+        }
+    };
+    ret
+}
+
+/*
+fn print_assign(assign: ASTNode) -> String {
+    let mut ret = String::from("fsm.variable");
+    if let ASTNode::Assignment {name, expr} = assign { 
+        if let ASTNode::TypedIdentifier { aql_type, variable } = *epxr {
+            ret = format!("fsm.variable \"{}\" {{initValue = 0 : {} }} : {}", variable, aql_type, aql_type);
+        }
+    } else {
+        panic!("invalid grammar.")
+    }
+
+    ret
+}
+*/
 
 /*
 fn pretty_print(tree: ASTNode, output: &mut Vec<String>, indent: u8, env: &mut HashMap<String, Option<String>>) -> String {
@@ -199,44 +280,5 @@ fn pretty_print(tree: ASTNode, output: &mut Vec<String>, indent: u8, env: &mut H
 
     }
     String::new()
-}
-*/
-fn generate_decl(decl: &ASTNode) -> String {
-    let mut ret = String::from("fsm.variable");
-
-    if let ASTNode::VariableDeclaration { typed_identifier, expr } = decl {
-        if let ASTNode::TypedIdentifier { aql_type, variable } = *typed_identifier.clone() {
-            match expr {
-                Some(val) => {
-                    if let ASTNode::Ident(expr) = *val.clone() {
-                        ret = format!("fsm.variable \"{}\" {{initValue = {} : {} }} : {}", variable, expr, aql_type, aql_type);
-                    } else {
-                        // todo(parse the expr)
-                        ret = format!("fsm.variable \"{}\" {{initValue = 0 : {} }} : {}", variable, aql_type, aql_type);
-                    }
-                },
-                None => {
-                    ret = format!("fsm.variable \"{}\" {{initValue = 0 : {} }} : {}", variable, aql_type, aql_type);
-                },
-            }
-        } else {
-            panic!("invalid grammar.")
-        }
-    };
-    ret
-}
-
-/*
-fn print_assign(assign: ASTNode) -> String {
-    let mut ret = String::from("fsm.variable");
-    if let ASTNode::Assignment {name, expr} = assign { 
-        if let ASTNode::TypedIdentifier { aql_type, variable } = *epxr {
-            ret = format!("fsm.variable \"{}\" {{initValue = 0 : {} }} : {}", variable, aql_type, aql_type);
-        }
-    } else {
-        panic!("invalid grammar.")
-    }
-
-    ret
 }
 */
