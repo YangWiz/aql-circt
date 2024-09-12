@@ -5,10 +5,10 @@ mod cfg;
 
 use ast::ASTNode;
 use cfg::{StateMachine, Structure};
-use eval;
+use eval::Value;
 
 use crate::parser::parse;
-use std::fs;
+use std::{env::var, fs};
 
 fn main() {
     let file = fs::read_to_string("example.aql").unwrap();
@@ -20,39 +20,12 @@ fn main() {
     
     let test = cfg::convert(ret.clone());
     println!("{}", generate(test));
-
-    // let mut env = HashMap::new();
-
-    // pretty_print(ret, &mut output, 0, &mut env);
-
-    /*
-    for el in output {
-      fsm.update %cnt, %c256_i16 : i16
-    }
-  }
-
-  fsm.state @BUSY output  {
-    %false = arith.constant false
-    fsm.output %false : i1
-  } transitions  {
-    // Transit to BUSY itself when `cnt` is not equal to zero. Meanwhile,
-    // decrease `cnt` by one.
-    fsm.transition @BUSY guard  {
-      %c0_i16 = arith.constant 0 : i16
-      %0 = arith.cmpi ne, %cnt, %c0_i16 : i16
-      fsm.return %0
-    } action  {
-      %c1_i16 = arith.constant 1 :
-         print!("{}", el);
-    }
-    */
-
 }
 
 fn generate(cfgs: StateMachine) -> String {
     let cfg_vec = cfgs.cfgs;
 
-    let mut fsm_machine = format!("fsm.machine @{}(%arg0: i1, %arg1: i1) -> (i16) attributes {{initialState = \"{}\"}}", cfgs.fsm_name, cfgs.entry);
+    let mut fsm_machine = format!("fsm.machine @{}(%arg0: i1, %arg1: i1) attributes {{initialState = \"{}\"}}", cfgs.fsm_name, cfgs.entry);
 
     fsm_machine += " {\n";
 
@@ -113,18 +86,39 @@ fn generate_stmt(stmt: &ASTNode) -> String {
 // These are all the initilzation process, so should add one indent.
 fn generate_decl(decl: &ASTNode) -> String {
     let mut ret = String::new();
+    let tbs = utils::ConversionTable::new();
 
     if let ASTNode::VariableDeclaration { typed_identifier, expr } = decl {
         if let ASTNode::TypedIdentifier { aql_type, variable } = *typed_identifier.clone() {
+            let aql_type = tbs.convert(&aql_type);
+                
             match expr {
                 Some(val) => {
                     // println!("Expr: {:?}", *val);
                     // ret = format!("fsm.variable \"{}\" {{initValue = {} : {} }} : {}", variable, init_value, aql_type, aql_type);
-                    if let ASTNode::ConstVal(val) = *val.clone() {
+                    if let ASTNode::ConstVal(mut val) = *val.clone() {
+                        let aql_type = match aql_type {
+                            utils::AQLType::Base(t) => { t },
+                            utils::AQLType::Ordering => {
+                                if val == "FIFO" {
+                                    val =  String::from("0");
+                                } else if variable == "Hash" {
+                                    val = String::from("1");
+                                } else {
+                                    val = String::from("2");
+                                }
+
+                                String::from("i32")
+                            },
+                        };
                         ret = format!("%{} = fsm.variable \"{}\" {{initValue = {} : {} }} : {}", variable, variable, val, aql_type, aql_type);
                     }
                 },
                 None => {
+                    let aql_type = match aql_type {
+                        utils::AQLType::Base(t) => { t },
+                        utils::AQLType::Ordering => { String::from("i32") },
+                    };
                     ret = format!("%{} = fsm.variable \"{}\" {{initValue = 0 : {} }} : {}", variable, variable, aql_type, aql_type);
                 },
             }

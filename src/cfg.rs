@@ -175,6 +175,10 @@ fn convert_struct(s_type: &str, name: &str, node: ASTNode, cfgs: &mut StateMachi
         let mut cfg = State::new(scope.clone());
         let mut transitions = Transitions::new();
 
+        // we should carry these information when parsing (actions and conditions).
+        let mut actions = vec![];
+        // let mut conditions = vec![];
+
         for stmt_raw in blk {
             // println!("{:?}", stmt_raw);
 
@@ -187,7 +191,8 @@ fn convert_struct(s_type: &str, name: &str, node: ASTNode, cfgs: &mut StateMachi
             match stmt_raw.clone() {
                 ASTNode::Assignment { name, expr } => {
                     let inst = Inst::Stmt(stmt_raw);
-                    cfg.insert_inst(inst);
+                    cfg.insert_inst(inst.clone());
+                    actions.push(inst);
                 },
                 ASTNode::VariableDeclaration { typed_identifier, expr } => {
                     let inst = Inst::Stmt(stmt_raw);
@@ -257,7 +262,7 @@ pub fn convert(node: ASTNode) -> StateMachine {
     for inst in &ret.insts {
         let Inst::Stmt(stmt) = inst;
         if let ASTNode::Assignment { name, expr } = stmt {
-            if "init_entry ".eq(name) {
+            if "init_entry".eq(name.trim()) {
                 // expr must be Qualified name.
                 if let ASTNode::QualifiedName { names } = *expr.clone() {
                     let state = &names[0];
