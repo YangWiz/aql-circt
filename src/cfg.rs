@@ -6,7 +6,32 @@ use uuid::Uuid;
 #[derive(Debug, PartialEq, Clone)]
 pub struct Transition {
     pub target: String, // State.
-    pub guards: Option<Vec<Box<ASTNode>>>, // Conditional expr.
+    pub guards: Option<Vec<ASTNode>>, // Conditional expr.
+}
+
+#[derive(Debug, Clone)]
+struct Vertex {
+    transition_target: Option<String>,
+    label: Uuid,
+    condition: Option<ASTNode>,
+    is_else: bool 
+}
+
+impl Vertex {
+    fn comparator(label: Uuid) -> Self {
+        Self {
+            transition_target: None,
+            label,
+            condition: None,
+            is_else: false,
+        }
+    }
+}
+
+impl PartialEq for Vertex {
+    fn eq(&self, other: &Self) -> bool {
+        self.label == other.label
+    }
 }
 
 impl Transition {
@@ -17,7 +42,7 @@ impl Transition {
         }
     }
 
-    fn insert_guard(&mut self, guard: Box<ASTNode>) {
+    fn insert_guard(&mut self, guard: ASTNode) {
         match &mut self.guards {
             Some(guards) => {
                 guards.push(guard);
@@ -86,7 +111,6 @@ pub struct ControlFlow {
     pub cond: Option<ASTNode>, // expr.
     pub lhs: Option<Rc<ControlFlow>>, // when if (true)
     pub rhs: Option<Rc<ControlFlow>>, // when if (false)
-    pub transition_ids: Vec<Uuid>,
 }
 
 impl ControlFlow {
@@ -97,16 +121,15 @@ impl ControlFlow {
             insts: vec![],
             lhs: None,
             rhs: None,
-            transition_ids: vec![],
         }
     }
 
-    fn add_next_lhs(&mut self, cfg: ControlFlow) {
-        self.lhs = Some(Rc::new(cfg))
+    fn add_next_lhs(&mut self, cfg: Rc<ControlFlow>) {
+        self.lhs = Some(cfg)
     }
 
-    fn add_next_rhs(&mut self, cfg: ControlFlow) {
-        self.rhs = Some(Rc::new(cfg))
+    fn add_next_rhs(&mut self, cfg: Rc<ControlFlow>) {
+        self.rhs = Some(cfg)
     }
 
     fn add_new_inst(&mut self, inst: Inst) {
@@ -193,27 +216,79 @@ impl Scope {
     }
 }
 
-fn collect_transitions(root: &ControlFlow, label2cfg: &HashMap<Uuid, Rc<ControlFlow>>) -> Transitions {
-    let mut conditionals = vec![];
-    let mut actions = vec![];
+fn collect_transitions(root: &ControlFlow, label2cfg: &HashMap<Uuid, Rc<ControlFlow>>, transition_labels: &Vec<Uuid>) -> Transitions {
+    // let mut conditionals = vec![];
+    // let mut actions = vec![];
     let mut transitions = Transitions::new();
 
-    for target in &root.transition_ids {
-        let mut paths: Vec<VecDeque<Uuid>> = vec![];
-        let mut path: VecDeque<Uuid> = VecDeque::new();
-        dfs(&target, root, &mut conditionals, &mut actions, &mut paths, &mut path);
+    for target in transition_labels {
+        let mut paths: Vec<VecDeque<Vertex>> = vec![];
+        let mut path: VecDeque<Vertex> = VecDeque::new();
+        dfs(&target, root, &mut paths, &mut path, None); // The first stmt is unconditional.
 
-        println!("{:?}", paths);
-        // We need to hack the first one, since it's not in the label2cfg due to my implementations.
-        for mut path in paths {
-            // let root = path.pop_front().unwrap();
+        // println!("paths: {:?}\n", paths);
+
+        let mut conditonals = vec![];
+        let mut actions = vec![];
+        for path in paths {
+            for vertex in path {
+                // add condition along the way. todo(add else condition, negation)
+                match vertex.condition {
+                    Some(cond) => {
+                        conditonals.push(cond);
+                    },
+                    None => {},
+                }
+
+                let control_flow = label2cfg.get(&vertex.label).unwrap();
+                for inst in &control_flow.insts {
+                    // We ignore the transition and after that.
+                    let Inst::Stmt(stmt) = inst;
+                    if let ASTNode::Transition { .. } = stmt {
+                        break;
+                    }
+
+                    actions.push(stmt);
+                }
+
+                match vertex.transition_target {
+                    Some(target) => {
+                        let mut transition = Transition::new(target);
+                        for guard in &conditonals {
+                            transition.insert_guard(guard.clone());
+                        }
+                        transitions.insert(transition);
+                    },
+                    None => {},
+                }
+            }
         }
+
+        // We need to hack the first one, since it's not in the label2cfg due to my implementations.
+        // for mut path in paths {
+        //     let parent_uuid = path.pop_front().unwrap();
+        //     let parent = root;
+
+        //     for inst in &parent.insts {
+        //         
+        //     }
+
+        //     // for label in path {
+        //     //     let current_cf = label2cfg.get(&label.lebel).unwrap();
+        //     //     match &parent.lhs {
+        //     //         Some(cf) => {
+
+        //     //         },
+        //     //         None => todo!(),
+        //     //     }
+        //     // }
+        // }
     }
 
     transitions
 }
 
-fn dfs(target: &Uuid, node: &ControlFlow, conditionals: &mut Vec<ASTNode>, actions: &mut Vec<ASTNode>, paths: &mut Vec<VecDeque<Uuid>>, path: &mut VecDeque<Uuid>) {
+fn dfs(target: &Uuid, node: &ControlFlow, paths: &mut Vec<VecDeque<Vertex>>, path: &mut VecDeque<Vertex>, cond: Option<ASTNode>) {
     // search transition, and record the actions and conditions through the traveral.
     // conds must be expr and actions must be statements.
     // if let ASTNode::Transition { action, ident } = root {
@@ -222,15 +297,36 @@ fn dfs(target: &Uuid, node: &ControlFlow, conditionals: &mut Vec<ASTNode>, actio
     // if let ASTNode::Conditional { expr, if_blk, else_blk } = root {
     //     conds.push(*expr.clone());
     // }
-    path.push_back(node.label);
+
+    // last inst is transition.
+    let transition_target;
+    match node.insts.last() {
+        Some(stmt) => {
+            let Inst::Stmt(transition) = stmt;
+            if let ASTNode::Transition { action: _, ident } = transition {
+                // We only care about transition as action. todo(implement other types of transitions)
+                if let ASTNode::Ident(target) = *ident.clone() {
+                    transition_target = Some(target);
+                } else {
+                    panic!("The last stmt is not the transition, invalid syntax.");
+                }
+            } else {
+                panic!("Invalid Control Flow Gra_ph.");
+            }
+        },
+        None => {
+            transition_target = None;
+        },
+    };
 
     if node.label == *target {
         paths.push(path.clone());
     } else {
         match &node.lhs {
             Some(lhs) => {
-                if !path.contains(&lhs.label) {
-                    dfs(target, &lhs, conditionals, actions, paths, path);
+                if !path.contains(&Vertex::comparator(lhs.label.clone())) {
+                    path.push_back(Vertex { transition_target: transition_target.clone(), label: node.label, condition: cond.clone(), is_else: false });
+                    dfs(target, &lhs, paths, path, node.cond.clone());
                 }
             },
             None => (),
@@ -238,8 +334,9 @@ fn dfs(target: &Uuid, node: &ControlFlow, conditionals: &mut Vec<ASTNode>, actio
 
         match &node.rhs {
             Some(rhs) => {
-                if !path.contains(&rhs.label) {
-                    dfs(target, &rhs, conditionals, actions, paths, path);
+                if !path.contains(&Vertex::comparator(rhs.label.clone())) {
+                    path.push_back(Vertex { transition_target, label: node.label, condition: cond, is_else: true });
+                    dfs(target, &rhs, paths, path, node.cond.clone());
                 }
             },
             None => (),
@@ -250,7 +347,7 @@ fn dfs(target: &Uuid, node: &ControlFlow, conditionals: &mut Vec<ASTNode>, actio
 }
 
 // We use the control flow graph here to execute some analysis (DFS, BFS, etc).
-fn get_cfg(blk: &ASTNode, transition_labels: &mut Vec<Uuid>, label2cfg: &mut HashMap<Uuid, Rc<ControlFlow>>) -> ControlFlow {
+fn get_cfg(blk: &ASTNode, transition_labels: &mut Vec<Uuid>, label2cfg: &mut HashMap<Uuid, Rc<ControlFlow>>) -> Rc::<ControlFlow> {
     // Get the structure_decl inner block.
     let mut cfg = ControlFlow::new();
 
@@ -274,12 +371,10 @@ fn get_cfg(blk: &ASTNode, transition_labels: &mut Vec<Uuid>, label2cfg: &mut Has
                 ASTNode::Conditional { expr, if_blk, else_blk } => {
                     cfg.add_cond(*expr);
                     cfg.add_next_lhs(get_cfg(&*if_blk, transition_labels, label2cfg));
-                    label2cfg.insert(cfg.lhs.as_ref().unwrap().label, cfg.lhs.as_ref().unwrap().clone());
 
                     if let ASTNode::None = *else_blk {
                     } else {
                         cfg.add_next_rhs(get_cfg(&*else_blk, transition_labels, label2cfg));
-                        label2cfg.insert(cfg.rhs.as_ref().unwrap().label, cfg.rhs.as_ref().unwrap().clone());
                         break; // reaheability.
                     }
 
@@ -304,6 +399,9 @@ fn get_cfg(blk: &ASTNode, transition_labels: &mut Vec<Uuid>, label2cfg: &mut Has
         }
     }
     
+    let cfg = Rc::new(cfg);
+    label2cfg.insert(cfg.label, cfg.clone());
+
     cfg
 }
 
@@ -330,15 +428,14 @@ fn convert_struct(s_type: &str, name: &str, node: ASTNode, cfgs: &mut StateMachi
         let mut transitions_labels = vec![];
         let mut label2cfg = HashMap::new();
         let mut cfg = get_cfg(&node, &mut transitions_labels, &mut label2cfg);
-        cfg.transition_ids = transitions_labels;
+        println!("{:?}", transitions_labels);
 
-        println!("{:?}", label2cfg);
-        // println!("{:?}", transitions_labels);
+        // println!("{:?}", label2cfg);
         // println!("{:?}", test);
         // println!("{:?}", test.lhs);
         // println!("{:?}", test.rhs);
 
-        collect_transitions(&cfg, &label2cfg);
+        collect_transitions(&cfg, &label2cfg, &transitions_labels);
     }
     
 
