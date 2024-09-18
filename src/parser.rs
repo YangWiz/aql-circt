@@ -88,7 +88,18 @@ fn parse_state(pair: pest::iterators::Pair<Rule>) -> ASTNode {
             return ASTNode::Assignment { name, expr };
         }
         Rule::conditional => {
+            let expr = Box::new(parse_expr(pairs.next().unwrap())); 
+            let if_blk = Box::new(parse_state(pairs.next().unwrap()));
+            let mut else_blk = Box::new(ASTNode::None);
 
+            // else block is optional.
+
+            let next_pair = pairs.next();
+            if next_pair.is_some() {
+                else_blk = Box::new(parse_state(next_pair.unwrap()));
+            }
+
+            return ASTNode::Conditional { expr, if_blk, else_blk };
         }
         Rule::block => {
             let mut stmts = vec![];

@@ -128,6 +128,11 @@ pub enum ASTNode {
         block: Box<ASTNode> 
     },
 
+    Conditional {
+        expr: Box<ASTNode>,
+        if_blk: Box<ASTNode>,
+        else_blk: Box<ASTNode>,
+    },
 
     None,
 }

@@ -5,7 +5,6 @@ mod cfg;
 
 use ast::ASTNode;
 use cfg::{StateMachine, Structure};
-use eval::Value;
 
 use crate::parser::parse;
 use std::{env::var, fs};
@@ -42,8 +41,6 @@ fn generate(cfgs: StateMachine) -> String {
                 },
             }
         }
-
-        
     }
 
     for cfg in cfg_vec {
@@ -80,8 +77,6 @@ fn generate_stmt(stmt: &ASTNode) -> String {
 
     ret
 }
-
-
 
 // These are all the initilzation process, so should add one indent.
 fn generate_decl(decl: &ASTNode) -> String {

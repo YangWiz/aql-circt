@@ -1,6 +1,7 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{cell::{Ref, RefCell}, collections::{HashMap, VecDeque}, hash::Hash, rc::Rc};
 
 use crate::ASTNode;
+use uuid::Uuid;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Transition {
@@ -74,6 +75,47 @@ pub struct State {
     pub scope: Scope,
     pub insts: Vec<Inst>,
     pub next: Transitions
+}
+
+#[derive(Debug, Clone)]
+pub struct ControlFlow {
+    // This is the control flow inside the State.
+    // State itself is also a control flow but with a higher level (Transitions between graphs).
+    pub label: Uuid,
+    pub insts: Vec<Inst>,
+    pub cond: Option<ASTNode>, // expr.
+    pub lhs: Option<Rc<ControlFlow>>, // when if (true)
+    pub rhs: Option<Rc<ControlFlow>>, // when if (false)
+    pub transition_ids: Vec<Uuid>,
+}
+
+impl ControlFlow {
+    fn new() -> Self {
+        ControlFlow {
+            label: Uuid::new_v4(),
+            cond: None,
+            insts: vec![],
+            lhs: None,
+            rhs: None,
+            transition_ids: vec![],
+        }
+    }
+
+    fn add_next_lhs(&mut self, cfg: ControlFlow) {
+        self.lhs = Some(Rc::new(cfg))
+    }
+
+    fn add_next_rhs(&mut self, cfg: ControlFlow) {
+        self.rhs = Some(Rc::new(cfg))
+    }
+
+    fn add_new_inst(&mut self, inst: Inst) {
+        self.insts.push(inst)
+    }
+
+    fn add_cond(&mut self, cond: ASTNode) {
+        self.cond = Some(cond); 
+    }
 }
 
 #[derive(Debug)]
@@ -151,9 +193,122 @@ impl Scope {
     }
 }
 
+fn collect_transitions(root: &ControlFlow, label2cfg: &HashMap<Uuid, Rc<ControlFlow>>) -> Transitions {
+    let mut conditionals = vec![];
+    let mut actions = vec![];
+    let mut transitions = Transitions::new();
+
+    for target in &root.transition_ids {
+        let mut paths: Vec<VecDeque<Uuid>> = vec![];
+        let mut path: VecDeque<Uuid> = VecDeque::new();
+        dfs(&target, root, &mut conditionals, &mut actions, &mut paths, &mut path);
+
+        println!("{:?}", paths);
+        // We need to hack the first one, since it's not in the label2cfg due to my implementations.
+        for mut path in paths {
+            // let root = path.pop_front().unwrap();
+        }
+    }
+
+    transitions
+}
+
+fn dfs(target: &Uuid, node: &ControlFlow, conditionals: &mut Vec<ASTNode>, actions: &mut Vec<ASTNode>, paths: &mut Vec<VecDeque<Uuid>>, path: &mut VecDeque<Uuid>) {
+    // search transition, and record the actions and conditions through the traveral.
+    // conds must be expr and actions must be statements.
+    // if let ASTNode::Transition { action, ident } = root {
+    //     // Reach the terminator of this path.
+    // }
+    // if let ASTNode::Conditional { expr, if_blk, else_blk } = root {
+    //     conds.push(*expr.clone());
+    // }
+    path.push_back(node.label);
+
+    if node.label == *target {
+        paths.push(path.clone());
+    } else {
+        match &node.lhs {
+            Some(lhs) => {
+                if !path.contains(&lhs.label) {
+                    dfs(target, &lhs, conditionals, actions, paths, path);
+                }
+            },
+            None => (),
+        }
+
+        match &node.rhs {
+            Some(rhs) => {
+                if !path.contains(&rhs.label) {
+                    dfs(target, &rhs, conditionals, actions, paths, path);
+                }
+            },
+            None => (),
+        }
+    }
+
+    path.pop_back();
+}
+
+// We use the control flow graph here to execute some analysis (DFS, BFS, etc).
+fn get_cfg(blk: &ASTNode, transition_labels: &mut Vec<Uuid>, label2cfg: &mut HashMap<Uuid, Rc<ControlFlow>>) -> ControlFlow {
+    // Get the structure_decl inner block.
+    let mut cfg = ControlFlow::new();
+
+    if let ASTNode::Block(blk) = blk {
+        for stmt_raw in blk {
+            match stmt_raw.clone() {
+                ASTNode::Assignment { .. } => {
+                    let inst = Inst::Stmt(stmt_raw.clone());
+                    cfg.add_new_inst(inst.clone());
+                },
+                ASTNode::VariableDeclaration { .. } => {
+                    let inst = Inst::Stmt(stmt_raw.clone());
+                    cfg.add_new_inst(inst);
+                },
+                ASTNode::Transition { .. } => {
+                    // Direct transition without any conditions.
+                    let inst = Inst::Stmt(stmt_raw.clone());
+                    cfg.add_new_inst(inst);
+                    transition_labels.push(cfg.label);
+                }
+                ASTNode::Conditional { expr, if_blk, else_blk } => {
+                    cfg.add_cond(*expr);
+                    cfg.add_next_lhs(get_cfg(&*if_blk, transition_labels, label2cfg));
+                    label2cfg.insert(cfg.lhs.as_ref().unwrap().label, cfg.lhs.as_ref().unwrap().clone());
+
+                    if let ASTNode::None = *else_blk {
+                    } else {
+                        cfg.add_next_rhs(get_cfg(&*else_blk, transition_labels, label2cfg));
+                        label2cfg.insert(cfg.rhs.as_ref().unwrap().label, cfg.rhs.as_ref().unwrap().clone());
+                        break; // reaheability.
+                    }
+
+                    // reacheability: 
+                    /*
+                        The last two lines here is not reachable, we can use else statement to check it.
+                        state iq_schedule_inst {
+                        if (i) {
+                            transition init_rob_entry; 
+                        } else {
+                            transition init_rob_entry; 
+                        }
+                        i32 write_value;
+                        transition init_rob_entry;
+                        }
+                     */
+                }
+                _ => {
+                    println!("Unimplementated stmt.");
+                }
+            }
+        }
+    }
+    
+    cfg
+}
+
 fn convert_struct(s_type: &str, name: &str, node: ASTNode, cfgs: &mut StateMachine) {
     // node is the structure_declaration.
-    let ret = StateMachine::new();
 
     let structure;
     if s_type == "controller_entry" {
@@ -170,6 +325,22 @@ fn convert_struct(s_type: &str, name: &str, node: ASTNode, cfgs: &mut StateMachi
         structure = Structure::None;
     }
     let scope = Scope::from(structure.clone(), String::from(name));
+    
+    if let Structure::State = structure {
+        let mut transitions_labels = vec![];
+        let mut label2cfg = HashMap::new();
+        let mut cfg = get_cfg(&node, &mut transitions_labels, &mut label2cfg);
+        cfg.transition_ids = transitions_labels;
+
+        println!("{:?}", label2cfg);
+        // println!("{:?}", transitions_labels);
+        // println!("{:?}", test);
+        // println!("{:?}", test.lhs);
+        // println!("{:?}", test.rhs);
+
+        collect_transitions(&cfg, &label2cfg);
+    }
+    
 
     if let ASTNode::Block(blk) = node {
         let mut cfg = State::new(scope.clone());
@@ -189,12 +360,12 @@ fn convert_struct(s_type: &str, name: &str, node: ASTNode, cfgs: &mut StateMachi
             */
 
             match stmt_raw.clone() {
-                ASTNode::Assignment { name, expr } => {
+                ASTNode::Assignment { .. } => {
                     let inst = Inst::Stmt(stmt_raw);
                     cfg.insert_inst(inst.clone());
                     actions.push(inst);
                 },
-                ASTNode::VariableDeclaration { typed_identifier, expr } => {
+                ASTNode::VariableDeclaration { .. } => {
                     let inst = Inst::Stmt(stmt_raw);
                     cfg.insert_inst(inst);
                 },
@@ -213,6 +384,9 @@ fn convert_struct(s_type: &str, name: &str, node: ASTNode, cfgs: &mut StateMachi
                     } else {
                         panic!("unknown action.");
                     }
+                }
+                ASTNode::Conditional { expr, if_blk, else_blk } => {
+                    println!("if")
                 }
                 _ => {
                     println!("Unimplementated stmt.");
