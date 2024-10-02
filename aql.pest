@@ -8,9 +8,11 @@ decimal = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
 
 string = @{ "'" ~ ( "''" | (!"'" ~ ANY) )* ~ "'" }
 
+ordering = @{ "FIFO" | "Hash" | "Stack" }
+
 ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_" | ASCII_ALPHA)* }
 
-constval = { integer | decimal | string }
+constval = { integer | decimal | string | ordering }
 
 qualified_name = { ident ~ ("." ~ ident)* }
 
@@ -57,13 +59,13 @@ dsl_transition = { dsl_keyword ~ ident }
 dsl_keyword = { "transition" | "reset" | "complete" }
 variable_declaration = { typed_identifier ~ ("=" ~ expr)? }
 assignment = { (qualified_name ~ "=" ~ expr) | (ident ~ "=" ~ expr) }
-conditional = { "if" ~ "(" ~ expr ~ ")" ~ statement ~ ("else" ~ statement)? }
+conditional = { "if" ~ "(" ~ (binop | unuaryop) ~ ")" ~ statement ~ ("else" ~ statement)? }
 block = { "{" ~ "\n"* ~ (statement ~ "\n"*)* ~ "}" }
 
 expr = {
-    dsl_term
+    binop
+    | dsl_term
     | unuaryop
-    | binop
     | list
 }
 
@@ -80,19 +82,18 @@ expr_list = { (expr ~ ("," ~ expr)*)? }
 dsl_term = {
     "(" ~ expr ~ ")"
     | call
-    | qualified_name
     | constval
+    | qualified_name
     | ident
     | "prev<" ~ expr_list ~ ">"
     | "next<" ~ expr_list ~ ">"
     | unuaryop
 }
 
-binop = _{ dsl_term ~ binop_keyword ~ dsl_term | dsl_term ~ binop_keyword ~ binop }
+binop = { dsl_term ~ binop_keyword ~ dsl_term | dsl_term ~ binop_keyword ~ binop }
 
 binop_keyword = {
-    "+" | "-" | "*" | "/" | "&" | "|" | "^" | "<" | ">" | "<=" | ">="
-    | "<<" | ">>" | "==" | "!="
+    "<=" | ">=" | "<<" | ">>" | "==" | "!=" | "+" | "-" | "*" | "/" | "&" | "|" | "^" | "<" | ">"
 }
 
 call = { qualified_name ~ "(" ~ expr_list ~ ")" }
