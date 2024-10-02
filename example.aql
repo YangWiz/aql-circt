@@ -1,0 +1,62 @@
+state_queue ROB {
+  element_ordering num_entries = FIFO
+}
+
+controller_entry ROB {
+  bool is_executed = 1;
+  i32 write_value;
+  i32 phys_addr;
+  i32 replay_value;
+
+  init_entry = init_rob_entry;
+}
+
+state init_rob_entry {
+  transition iq_schedule_inst;
+}
+
+state iq_await_creation {
+  if (phys_addr > replay_value) {
+    transition iq_schedule_inst;
+  }
+  transition init_rob_entry;
+}
+
+state iq_schedule_inst {
+  if (write_value>=replay_value) {
+    transition test;
+    if (phys_addr>=write_value) {
+      replay_value = phys_addr;
+      transition iq_schedule_inst;
+    } else {
+      transition init_rob_entry;
+    }
+  } else {
+    if (phys_addr > write_value) {
+      transition iq_await_creation;
+    }
+  }
+  i32 write_value;
+  transition init_rob_entry;
+}
+
+state iq_schedule_inst {
+  phys_addr = replay_value;
+  if (write_value>=replay_value) {
+    phys_addr = replay_value;
+    if (phys_addr>=write_value) {
+      replay_value = phys_addr;
+      replay_value = phys_addr;
+      transition iq_schedule_inst;
+    } else {
+      transition init_rob_entry;
+    }
+  } else {
+    if (phys_addr > write_value) {
+      transition iq_await_creation;
+    }
+  }
+  i32 write_value;
+  transition init_rob_entry;
+}
+

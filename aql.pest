@@ -1,0 +1,119 @@
+program = _{ SOI ~ "\n"* ~ (declaration ~ "\n"+)* ~ declaration? ~ EOI } // underscore to silence the program.
+
+WHITESPACE = _{ " " | "\t" }
+
+integer = @{ ASCII_DIGIT+ }
+
+decimal = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
+
+string = @{ "'" ~ ( "''" | (!"'" ~ ANY) )* ~ "'" }
+
+ordering = @{ "FIFO" | "Hash" | "Stack" }
+
+ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_" | ASCII_ALPHA)* }
+
+constval = { integer | decimal | string | ordering }
+
+qualified_name = { ident ~ ("." ~ ident)* }
+
+declaration = {
+    structure_declaration
+    | internal_func_decl
+}
+
+structure_declaration = {
+    structure_keyword ~ ident ~ statement    
+}
+
+structure_keyword = {
+    "controller_entry"
+    | "controller"
+    | "state_queue"
+    | "state"
+    | "controller_control_flow"
+}
+
+internal_func_decl = {
+    typed_identifier ~ "(" ~ arg_list ~ ")" ~ statement
+}
+
+arg_list = { typed_identifier ~ ("," ~ typed_identifier)* }
+
+statement = _{
+    labeled_statement ~ ";"?
+    | await_block ~ ";"?
+    | dsl_transition ~ ";"?
+    | variable_declaration ~ ";"?
+    | assignment ~ ";"?
+    | conditional ~ ";"?
+    | ("stall" ~ "(" ~ expr ~ ")" ) ~ ";"?
+    | block ~ ";"?
+    | listen_handle ~ ";"?
+    | return_stmt ~ ";"?
+    | expr ~ ";"?
+}
+
+labeled_statement = { label ~ statement }
+label = { "result_rewrite" | "inst_source" | "commit" }
+dsl_transition = { dsl_keyword ~ ident }
+dsl_keyword = { "transition" | "reset" | "complete" }
+variable_declaration = { typed_identifier ~ ("=" ~ expr)? }
+assignment = { (qualified_name ~ "=" ~ expr) | (ident ~ "=" ~ expr) }
+conditional = { "if" ~ "(" ~ (binop | unuaryop) ~ ")" ~ statement ~ ("else" ~ statement)? }
+block = { "{" ~ "\n"* ~ (statement ~ "\n"*)* ~ "}" }
+
+expr = {
+    binop
+    | dsl_term
+    | unuaryop
+    | list
+}
+
+typed_identifier = { ident ~ ident } // type var
+
+unuaryop = _{ unuaryop_keyword ~ dsl_term }
+unuaryop_keyword = { "!" | "~" | "-" }
+
+list = { "[" ~ expr_list ~ "]" }
+
+expr_list = { (expr ~ ("," ~ expr)*)? }
+
+// The | order matters.
+dsl_term = {
+    "(" ~ expr ~ ")"
+    | call
+    | constval
+    | qualified_name
+    | ident
+    | "prev<" ~ expr_list ~ ">"
+    | "next<" ~ expr_list ~ ">"
+    | unuaryop
+}
+
+binop = { dsl_term ~ binop_keyword ~ dsl_term | dsl_term ~ binop_keyword ~ binop }
+
+binop_keyword = {
+    "<=" | ">=" | "<<" | ">>" | "==" | "!=" | "+" | "-" | "*" | "/" | "&" | "|" | "^" | "<" | ">"
+}
+
+call = { qualified_name ~ "(" ~ expr_list ~ ")" }
+
+await_block = {
+    "await" ~ (call)? ~ "{" ~ "\n"* ~ (when_block ~ "\n"*)* ~ "}" ~ "\n"*
+}
+
+when_block = {
+    "when" ~ call ~ "from" ~ ident ~ block 
+}
+
+listen_handle = {
+    "listen" ~ statement ~ catch_block+  
+}
+
+catch_block = {
+    "handle" ~ qualified_name ~ "(" ~ ident* ~ ")" ~ statement
+}
+
+return_stmt = {
+    "return" ~ expr
+}
