@@ -1,4 +1,4 @@
-use crate::ast::{self, ASTNode};
+use crate::ast::{self, ASTNode, BinVerb};
 use pest::Parser;
 use pest_derive::Parser;
 
@@ -13,11 +13,11 @@ pub fn parse(source: &str) -> ASTNode {
     for pair in pairs {
         match pair.as_rule() {
             Rule::declaration => {
-                ret.push(ASTNode::Declaration(Box::new(parse_decl(pair))));                
-            },
+                ret.push(ASTNode::Declaration(Box::new(parse_decl(pair))));
+            }
             _ => {}
         }
-    };
+    }
     ASTNode::Top(ret)
 }
 
@@ -31,18 +31,15 @@ fn parse_decl(pair: pest::iterators::Pair<Rule>) -> ASTNode {
             let ident = pairs.next().unwrap();
             let stmt = pairs.next().unwrap();
 
-            let structure_declaration = ast::ASTNode::StructureDelcaration { 
-                s_type, 
+            let structure_declaration = ast::ASTNode::StructureDelcaration {
+                s_type,
                 name: ident.as_str().to_string(),
                 statement: Box::new(parse_state(stmt)),
             };
             structure_declaration
-        },
-        Rule::internal_func_decl => {
-        
-            ast::ASTNode::None 
-        },
-        _ => ast::ASTNode::None 
+        }
+        Rule::internal_func_decl => ast::ASTNode::None,
+        _ => ast::ASTNode::None,
     };
     ret
 }
@@ -60,9 +57,7 @@ fn parse_typed_identifier(pair: pest::iterators::Pair<Rule>) -> ASTNode {
 fn parse_state(pair: pest::iterators::Pair<Rule>) -> ASTNode {
     let mut pairs = pair.clone().into_inner();
     match pair.as_rule() {
-        Rule::labeled_statement => {
-
-        }
+        Rule::labeled_statement => {}
         Rule::dsl_transition => {
             let action = pairs.next().unwrap().as_str().to_string();
             let ident = Box::new(ASTNode::Ident(pairs.next().unwrap().as_str().to_string()));
@@ -74,11 +69,16 @@ fn parse_state(pair: pest::iterators::Pair<Rule>) -> ASTNode {
             let typed_identifier = Box::new(parse_typed_identifier(typed_identifier));
             if let Some(expr_raw) = pairs.next() {
                 let expr = Some(Box::new(parse_expr(expr_raw)));
-                return ASTNode::VariableDeclaration { typed_identifier, expr };
+                return ASTNode::VariableDeclaration {
+                    typed_identifier,
+                    expr,
+                };
             } else {
-                return ASTNode::VariableDeclaration { typed_identifier, expr: None };
+                return ASTNode::VariableDeclaration {
+                    typed_identifier,
+                    expr: None,
+                };
             }
-
         }
         Rule::assignment => {
             let name = pairs.next().unwrap().as_str().to_string();
@@ -88,18 +88,21 @@ fn parse_state(pair: pest::iterators::Pair<Rule>) -> ASTNode {
             return ASTNode::Assignment { name, expr };
         }
         Rule::conditional => {
-            let expr = Box::new(parse_expr(pairs.next().unwrap())); 
+            let condition = Box::new(parse_conditon(pairs.next().unwrap()));
             let if_blk = Box::new(parse_state(pairs.next().unwrap()));
             let mut else_blk = Box::new(ASTNode::None);
 
             // else block is optional.
-
             let next_pair = pairs.next();
             if next_pair.is_some() {
                 else_blk = Box::new(parse_state(next_pair.unwrap()));
             }
 
-            return ASTNode::Conditional { expr, if_blk, else_blk };
+            return ASTNode::Conditional {
+                expr: condition,
+                if_blk,
+                else_blk,
+            };
         }
         Rule::block => {
             let mut stmts = vec![];
@@ -119,35 +122,33 @@ fn parse_state(pair: pest::iterators::Pair<Rule>) -> ASTNode {
                 match pair.as_rule() {
                     Rule::call => {
                         call = Some(Box::new(parse_dsl(pair)));
-                    },
+                    }
                     Rule::when_block => {
                         when_block = Box::new(parse_when(pair));
-                    },
-                    _ => {
-
                     }
+                    _ => {}
                 }
             }
-            return ASTNode::Await { keyword, call, when_block };
+            return ASTNode::Await {
+                keyword,
+                call,
+                when_block,
+            };
         }
 
         Rule::listen_handle => {
             let block = Box::new(parse_state(pairs.next().unwrap()));
             let catch_block = Box::new(parse_catch(pairs.next().unwrap()));
 
-            return ASTNode::Listen { block, catch_block }
+            return ASTNode::Listen { block, catch_block };
         }
 
-        Rule::return_stmt => {
-
-        }
+        Rule::return_stmt => {}
 
         Rule::expr => {
             return parse_expr(pair);
         }
-        _ => {
-
-        }
+        _ => {}
     }
 
     ASTNode::None
@@ -158,7 +159,19 @@ fn parse_when(pair: pest::iterators::Pair<Rule>) -> ASTNode {
     let call = Box::new(parse_dsl(pairs.next().unwrap()));
     let ident = Box::new(ASTNode::Ident(pairs.next().unwrap().as_str().to_string()));
     let block = Box::new(parse_state(pairs.next().unwrap()));
-    ASTNode::When { keyword: String::from("when"), call, ident, block }
+    ASTNode::When {
+        keyword: String::from("when"),
+        call,
+        ident,
+        block,
+    }
+}
+
+fn parse_conditon(pair: pest::iterators::Pair<Rule>) -> ASTNode {
+    if let Rule::binop = pair.as_rule() {
+        return parse_binop(pair);
+    }
+    ASTNode::None
 }
 
 fn parse_expr(pair: pest::iterators::Pair<Rule>) -> ASTNode {
@@ -169,23 +182,65 @@ fn parse_expr(pair: pest::iterators::Pair<Rule>) -> ASTNode {
             return parse_dsl(pair);
         }
 
+        Rule::unuaryop => {}
 
-        Rule::unuaryop => {
-
-        }
-        
         Rule::binop => {
-
+            return parse_binop(pair);
         }
 
-        Rule::list => {
-
-        }
+        Rule::list => {}
 
         _ => {}
     }
 
     ASTNode::None
+}
+
+fn parse_binop(pair: pest::iterators::Pair<Rule>) -> ASTNode {
+    let mut result = ASTNode::None;
+    let mut pairs = pair.into_inner();
+
+    let lhs_dsl = pairs.next().unwrap();
+    let lhs = Box::new(parse_dsl(lhs_dsl));
+    let bin_keyword = pairs.next().unwrap();
+    let rhs = pairs.next().unwrap();
+
+    let keyword = match bin_keyword.as_str() {
+        "+" => BinVerb::Plus,
+        "-" => BinVerb::Minus,
+        "*" => BinVerb::Times,
+        "/" => BinVerb::Divide,
+        "&" => BinVerb::And,
+        "|" => BinVerb::Or,
+        "^" => BinVerb::Xor,
+        "<" => BinVerb::SmallerThan,
+        ">" => BinVerb::LargerThan,
+        "<=" => BinVerb::SmallerOrEqual,
+        ">=" => BinVerb::LargerOrEqual,
+        "<<" => BinVerb::LeftShift,
+        ">>" => BinVerb::RightShift,
+        "==" => BinVerb::Equal,
+        "!=" => BinVerb::NotEqual,
+        _ => panic!("Illegle keyword for binop"),
+    };
+
+    if let Rule::dsl_term = rhs.as_rule() {
+        let rhs = Box::new(parse_dsl(rhs));
+        result = ASTNode::BinOp {
+            verb: keyword,
+            lhs,
+            rhs,
+        };
+    } else if let Rule::binop = rhs.as_rule() {
+        let rhs = Box::new(parse_binop(rhs));
+        result = ASTNode::BinOp {
+            verb: keyword,
+            lhs,
+            rhs,
+        };
+    }
+
+    result
 }
 
 fn parse_dsl(pair: pest::iterators::Pair<Rule>) -> ASTNode {
@@ -206,7 +261,10 @@ fn parse_dsl(pair: pest::iterators::Pair<Rule>) -> ASTNode {
 
             let list = Box::new(ASTNode::ExprList(args_list));
 
-            return ASTNode::Call { qualified_name, list }
+            return ASTNode::Call {
+                qualified_name,
+                list,
+            };
         }
         Rule::ident => {
             return ASTNode::Ident(pair.as_str().to_string());
@@ -218,9 +276,7 @@ fn parse_dsl(pair: pest::iterators::Pair<Rule>) -> ASTNode {
             let constval = pair.into_inner().next().unwrap();
             return ASTNode::ConstVal(constval.as_str().to_string());
         }
-        _ => {
-
-        }
+        _ => {}
     }
     ASTNode::None
 }
@@ -235,9 +291,7 @@ fn parse_catch(pair: pest::iterators::Pair<Rule>) -> ASTNode {
 
     for pair in pairs {
         match pair.as_rule() {
-            Rule::ident => {
-                idents.push(ASTNode::Ident(pair.as_str().to_string()))
-            }
+            Rule::ident => idents.push(ASTNode::Ident(pair.as_str().to_string())),
             Rule::statement => {
                 block = Box::new(parse_state(pair));
             }
@@ -247,11 +301,12 @@ fn parse_catch(pair: pest::iterators::Pair<Rule>) -> ASTNode {
             }
         }
     }
-    ASTNode::CatchBlock { keyword, 
-                        qualified_name, 
-                        idents, 
-                        block 
-                    }
+    ASTNode::CatchBlock {
+        keyword,
+        qualified_name,
+        idents,
+        block,
+    }
 }
 
 fn parse_qualified_name(pair: pest::iterators::Pair<Rule>) -> ASTNode {
@@ -263,5 +318,5 @@ fn parse_qualified_name(pair: pest::iterators::Pair<Rule>) -> ASTNode {
         ret.push(ASTNode::Ident(pair.as_str().to_string()));
     }
 
-    ASTNode::QualifiedName { names: ret } 
+    ASTNode::QualifiedName { names: ret }
 }

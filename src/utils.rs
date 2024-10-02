@@ -3,14 +3,14 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub enum AQLType {
     Base(String),
-    Ordering
+    Ordering,
 }
 
 #[derive(Clone)]
 pub enum Ordering {
     FIFO(String),
     HASH(String),
-    STACK(String)
+    STACK(String),
 }
 
 #[derive(Debug, Clone)]
@@ -28,9 +28,7 @@ impl ConversionTable {
         tbs.insert(String::from("i64"), AQLType::Base(String::from("i64")));
         tbs.insert(String::from("element_ordering"), AQLType::Ordering);
 
-        ConversionTable {
-            tbs
-        }
+        ConversionTable { tbs }
     }
 
     pub fn convert(&self, t: &String) -> AQLType {

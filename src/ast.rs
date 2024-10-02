@@ -1,5 +1,4 @@
-#[derive(Debug)]
-#[derive(PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum BinVerb {
     Plus,
     Minus,
@@ -15,33 +14,30 @@ pub enum BinVerb {
     LeftShift,
     RightShift,
     Equal,
-    NotEqual
+    NotEqual,
+    Neg(Box<BinVerb>),
+    Empty,
 }
 
-
-
-#[derive(Debug)]
-#[derive(PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum UniVerb {
     Not,
     Tiled,
     Minus,
 }
 
-#[derive(Debug)]
-#[derive(PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Label {
     ResultRewrite,
     InstSource,
-    Commit
+    Commit,
 }
 
-#[derive(Debug)]
-#[derive(PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum DSLKeyword {
     Transition,
     Reset,
-    Complete
+    Complete,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -69,12 +65,12 @@ pub enum ASTNode {
 
     VariableDeclaration {
         typed_identifier: Box<ASTNode>, // type_identifier
-        expr: Option<Box<ASTNode>>
-    }, 
+        expr: Option<Box<ASTNode>>,
+    },
 
     Assignment {
         name: String,
-        expr: Box<ASTNode>
+        expr: Box<ASTNode>,
     },
 
     Declaration(Box<ASTNode>),
@@ -87,16 +83,16 @@ pub enum ASTNode {
     StructureDelcaration {
         s_type: String,
         name: String,
-        statement: Box<ASTNode>
+        statement: Box<ASTNode>,
     },
-    
+
     InternalFuncDecl(Box<ASTNode>),
 
     CatchBlock {
-        keyword: String, 
+        keyword: String,
         qualified_name: Box<ASTNode>, // function call, etc.
-        idents: Vec<ASTNode>, // arguments
-        block: Box<ASTNode> // statements
+        idents: Vec<ASTNode>,         // arguments
+        block: Box<ASTNode>,          // statements
     },
 
     Block(Vec<ASTNode>),
@@ -110,7 +106,7 @@ pub enum ASTNode {
 
     Call {
         qualified_name: Box<ASTNode>,
-        list: Box<ASTNode>
+        list: Box<ASTNode>,
     },
 
     ExprList(Vec<ASTNode>),
@@ -125,7 +121,7 @@ pub enum ASTNode {
         keyword: String,
         call: Box<ASTNode>,
         ident: Box<ASTNode>,
-        block: Box<ASTNode> 
+        block: Box<ASTNode>,
     },
 
     Conditional {
@@ -134,24 +130,23 @@ pub enum ASTNode {
         else_blk: Box<ASTNode>,
     },
 
-    None,
-}
-
-#[derive(Debug)]
-#[derive(PartialEq, Clone)]
-pub enum Expr {
-    UnuaryOp {
-        verb: UniVerb,
-        term: Box<ASTNode> // dsl_term
-    },
-
     BinOp {
         verb: BinVerb,
         lhs: Box<ASTNode>,
-        rhs: Box<ASTNode>
+        rhs: Box<ASTNode>,
     },
 
+    UnuaryOp {
+        verb: UniVerb,
+        term: Box<ASTNode>,
+    },
+
+    None,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Expr {
     List(Vec<Expr>),
 
-    DSLTerm
+    DSLTerm,
 }

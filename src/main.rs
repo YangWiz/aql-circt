@@ -1,13 +1,13 @@
 mod ast;
+mod cfg;
 mod parser;
 mod utils;
-mod cfg;
 
-use ast::ASTNode;
+use ast::{ASTNode, BinVerb};
 use cfg::{StateMachine, Structure};
 
 use crate::parser::parse;
-use std::{env::var, fs};
+use std::fs;
 
 fn main() {
     let file = fs::read_to_string("example.aql").unwrap();
@@ -16,7 +16,7 @@ fn main() {
     // println!("{:?}", &ret);
 
     // let mut env = HashMap::new();
-    
+
     let test = cfg::convert(ret.clone());
     println!("{}", generate(test));
 }
@@ -24,7 +24,10 @@ fn main() {
 fn generate(cfgs: StateMachine) -> String {
     let cfg_vec = cfgs.cfgs;
 
-    let mut fsm_machine = format!("fsm.machine @{}(%arg0: i1, %arg1: i1) attributes {{initialState = \"{}\"}}", cfgs.fsm_name, cfgs.entry);
+    let mut fsm_machine = format!(
+        "fsm.machine @{}(%arg0: i1, %arg1: i1) attributes {{initialState = \"{}\"}}",
+        cfgs.fsm_name, cfgs.entry
+    );
 
     fsm_machine += " {\n";
 
@@ -38,7 +41,7 @@ fn generate(cfgs: StateMachine) -> String {
                     fsm_machine += "\t";
                     fsm_machine += &generate_decl(stmt);
                     fsm_machine += "\n";
-                },
+                }
             }
         }
     }
@@ -52,10 +55,28 @@ fn generate(cfgs: StateMachine) -> String {
             // print transition.
             for tran in &cfg.next.trans {
                 // guard and actions are all optional.
-                let transition = format!("\t\tfsm.transition @{}\n", tran.target);
+                let transition = format!("\t\tfsm.transition @{} ", tran.target);
+                let mut guards = String::from("");
+                let mut actions = String::from("\n");
+
+                match tran.guards.as_ref() {
+                    Some(raw_guards) => {
+                        guards = parse_guards(raw_guards);
+                    }
+                    None => (),
+                }
+
+                match tran.actions.as_ref() {
+                    Some(raw_action) => {
+                        actions = generate_actions(raw_action);
+                    }
+                    None => (),
+                }
                 fsm_machine += &transition;
+                fsm_machine += &guards;
+                fsm_machine += &actions;
             }
-            fsm_machine += "\t}\n\n";
+            fsm_machine += "\n\t}\n\n";
         }
     }
 
@@ -63,19 +84,88 @@ fn generate(cfgs: StateMachine) -> String {
     fsm_machine
 }
 
-fn generate_stmt(stmt: &ASTNode) -> String {
-    let ret = match stmt {
-        ASTNode::VariableDeclaration { typed_identifier, expr } => {
-            generate_decl(stmt)
-        },
-        ASTNode::Assignment { name, expr } => { String::new() },
-        ASTNode::Transition { action, ident } => todo!(),
-        _ => {
-            panic!("Grammar error for instructions.");
+fn generate_actions(actions: &Vec<ASTNode>) -> String {
+    let mut ret = String::from(" action {\n");
+    for action in actions {
+        let mut act = format!("\t\t\tfsm.update ");
+        if let ASTNode::Assignment { name, expr } = action {
+            let rhs = generate_stmt(expr.as_ref());
+            act += &format!("%{}, {} : i32\n", name, rhs);
         }
+        ret += &act;
+    }
+    ret += "\t\t}\n";
+    ret
+}
+
+fn parse_guards(guards: &Vec<ASTNode>) -> String {
+    let mut ret = String::from("\t\t\t%fsm_output = comb.and");
+
+    let mut conditions = vec![];
+    for (i, inst) in guards.into_iter().enumerate() {
+        if let ASTNode::BinOp { verb, lhs, rhs } = inst {
+            let symbol = get_binverb(&verb);
+            let lhs = generate_stmt(lhs);
+            let rhs = generate_stmt(rhs);
+            let cond = format!("\t\t\t%{} = comb.icmp {} {}, {} : i32", i, symbol, lhs, rhs);
+
+            if i == guards.len() - 1 {
+                ret += &format!(" %{}", i);
+            } else {
+                ret += &format!(" %{},", i);
+            }
+            conditions.push(cond);
+        }
+    }
+
+    ret += " : i1\n";
+    let return_stmt = String::from("\t\t\tfsm.return %fsm_output\n\t\t}");
+    let mut guards = String::from("guard {\n");
+    for cond in &conditions {
+        guards += cond;
+        guards += "\n";
+    }
+
+    guards += &ret;
+    guards += &return_stmt;
+    guards
+}
+
+fn get_binverb(verb: &BinVerb) -> String {
+    let symbol = match verb {
+        ast::BinVerb::SmallerThan => String::from("ult"),
+        ast::BinVerb::LargerThan => String::from("ugt"),
+        ast::BinVerb::SmallerOrEqual => String::from("ule"),
+        ast::BinVerb::LargerOrEqual => String::from("uge"),
+        ast::BinVerb::Equal => String::from("eq"),
+        ast::BinVerb::NotEqual => String::from("ne"),
+        ast::BinVerb::Neg(_) => get_binverb(&reduce_neg(&verb)),
+        _ => todo!("Unsupported binary operation: {:?}", verb),
     };
 
-    ret
+    symbol
+}
+
+fn reduce_neg(verb: &BinVerb) -> BinVerb {
+    if let BinVerb::Neg(v) = verb {
+        if let BinVerb::Neg(inner_v) = *v.clone() {
+            return reduce_neg(&inner_v);
+        } else {
+            let ret = match *v.clone() {
+                BinVerb::SmallerThan => BinVerb::LargerOrEqual,
+                BinVerb::LargerThan => BinVerb::SmallerOrEqual,
+                BinVerb::SmallerOrEqual => BinVerb::LargerThan,
+                BinVerb::LargerOrEqual => BinVerb::SmallerThan,
+                BinVerb::Equal => BinVerb::NotEqual,
+                BinVerb::NotEqual => BinVerb::Equal,
+                _ => todo!("Unsupported binary operation: {:?}", v),
+            };
+
+            return ret;
+        }
+    } else {
+        return verb.clone();
+    }
 }
 
 // These are all the initilzation process, so should add one indent.
@@ -83,20 +173,24 @@ fn generate_decl(decl: &ASTNode) -> String {
     let mut ret = String::new();
     let tbs = utils::ConversionTable::new();
 
-    if let ASTNode::VariableDeclaration { typed_identifier, expr } = decl {
+    if let ASTNode::VariableDeclaration {
+        typed_identifier,
+        expr,
+    } = decl
+    {
         if let ASTNode::TypedIdentifier { aql_type, variable } = *typed_identifier.clone() {
             let aql_type = tbs.convert(&aql_type);
-                
+
             match expr {
                 Some(val) => {
                     // println!("Expr: {:?}", *val);
                     // ret = format!("fsm.variable \"{}\" {{initValue = {} : {} }} : {}", variable, init_value, aql_type, aql_type);
                     if let ASTNode::ConstVal(mut val) = *val.clone() {
                         let aql_type = match aql_type {
-                            utils::AQLType::Base(t) => { t },
+                            utils::AQLType::Base(t) => t,
                             utils::AQLType::Ordering => {
                                 if val == "FIFO" {
-                                    val =  String::from("0");
+                                    val = String::from("0");
                                 } else if variable == "Hash" {
                                     val = String::from("1");
                                 } else {
@@ -104,18 +198,24 @@ fn generate_decl(decl: &ASTNode) -> String {
                                 }
 
                                 String::from("i32")
-                            },
+                            }
                         };
-                        ret = format!("%{} = fsm.variable \"{}\" {{initValue = {} : {} }} : {}", variable, variable, val, aql_type, aql_type);
+                        ret = format!(
+                            "%{} = fsm.variable \"{}\" {{initValue = {} : {} }} : {}",
+                            variable, variable, val, aql_type, aql_type
+                        );
                     }
-                },
+                }
                 None => {
                     let aql_type = match aql_type {
-                        utils::AQLType::Base(t) => { t },
-                        utils::AQLType::Ordering => { String::from("i32") },
+                        utils::AQLType::Base(t) => t,
+                        utils::AQLType::Ordering => String::from("i32"),
                     };
-                    ret = format!("%{} = fsm.variable \"{}\" {{initValue = 0 : {} }} : {}", variable, variable, aql_type, aql_type);
-                },
+                    ret = format!(
+                        "%{} = fsm.variable \"{}\" {{initValue = 0 : {} }} : {}",
+                        variable, variable, aql_type, aql_type
+                    );
+                }
             }
         } else {
             panic!("invalid grammar.")
@@ -124,10 +224,33 @@ fn generate_decl(decl: &ASTNode) -> String {
     ret
 }
 
+fn generate_stmt(node: &ASTNode) -> String {
+    let ret = match node {
+        ASTNode::Ident(var) => String::from("%") + var,
+        ASTNode::QualifiedName { names } => {
+            let mut ret = String::from("%");
+            for (i, name) in names.iter().enumerate() {
+                match name {
+                    ASTNode::Ident(ident) => {
+                        ret = ret + ident;
+                        if i != names.len() - 1 {
+                            ret += ".";
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            ret
+        }
+        _ => todo!("Unimplemented statement."),
+    };
+    ret
+}
+
 /*
 fn print_assign(assign: ASTNode) -> String {
     let mut ret = String::from("fsm.variable");
-    if let ASTNode::Assignment {name, expr} = assign { 
+    if let ASTNode::Assignment {name, expr} = assign {
         if let ASTNode::TypedIdentifier { aql_type, variable } = *epxr {
             ret = format!("fsm.variable \"{}\" {{initValue = 0 : {} }} : {}", variable, aql_type, aql_type);
         }
@@ -192,7 +315,7 @@ fn pretty_print(tree: ASTNode, output: &mut Vec<String>, indent: u8, env: &mut H
                 output.push(String::from("@") + name.as_str() + " transitions ");
             }
             if s_type == String::from("controller_entry") {
-                // a series of initilizations. 
+                // a series of initilizations.
             }
 
             pretty_print(*statement, output, indent, env);
@@ -264,7 +387,7 @@ fn pretty_print(tree: ASTNode, output: &mut Vec<String>, indent: u8, env: &mut H
                 _ => {
 
                 }
-            } 
+            }
         },
 
     }
