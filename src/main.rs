@@ -7,18 +7,43 @@ use ast::{ASTNode, BinVerb};
 use cfg::{StateMachine, Structure};
 
 use crate::parser::parse;
-use std::fs;
+use clap::{arg, command, value_parser};
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::PathBuf,
+};
 
 fn main() {
-    let file = fs::read_to_string("example.aql").unwrap();
-    let ret = parse(&file);
-    // let mut output = Vec::new();
-    // println!("{:?}", &ret);
+    let matches = command!()
+        .arg(
+            arg!(
+                -i --input <FILE> "Sets a input file."
+            )
+            .required(true)
+            .value_parser(value_parser!(PathBuf)),
+        )
+        .arg(
+            arg!(
+                -o --output <FILE> "Sets a output file."
+            )
+            .required(true)
+            .value_parser(value_parser!(PathBuf)),
+        )
+        .get_matches();
 
-    // let mut env = HashMap::new();
+    if let Some(file) = matches.get_one::<PathBuf>("input") {
+        let file_text = fs::read_to_string(file).unwrap();
+        let ast = parse(&file_text);
+        let graph = cfg::convert(ast);
+        let output = generate(graph);
 
-    let test = cfg::convert(ret.clone());
-    println!("{}", generate(test));
+        if let Some(output_path) = matches.get_one::<PathBuf>("output") {
+            let mut file = File::create(output_path).unwrap();
+
+            file.write_all(output.as_bytes()).unwrap();
+        }
+    }
 }
 
 fn generate(cfgs: StateMachine) -> String {
