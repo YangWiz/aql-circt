@@ -10,6 +10,10 @@ pest = "2.7.11"
 pest_derive = "2.7.11"
 eval = "0.4.3"
 
+[dependencies.clap]
+version = "4.5.19"
+features = ["cargo"]
+
 [dependencies.uuid]
 version = "1.10.0"
 features = [
