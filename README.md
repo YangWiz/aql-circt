@@ -24,14 +24,14 @@ To run this compiler, first install the following:
 1. First, generate the FSM dialect for CIRCT to produce the corresponding Verilog code:
 
    ```bash
-   Example:
+   # Example:
 
    cargo run -- -i example.aql -o text.mlir
    ```
 
 2. Next, use the /circt/build/bin/circt-opt tool to generate the Verilog code:
     ```
-    Example:
+    # Example:
 
     ./circt-opt -convert-fsm-to-sv --lower-seq-to-sv -export-verilog ./text.mlir
     ```
